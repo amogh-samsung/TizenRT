@@ -30,17 +30,13 @@ wifi_manager_info.c
 CSRCS += wifi_manager_dhcpc.c
 CSRCS += wifi_manager_dhcps.c
 
-ifeq ($(WIFI_MANAGER_SAVE_CONFIG), y)
+ifeq ($(CONFIG_WIFI_MANAGER_SAVE_CONFIG), y)
 CSRCS += wifi_manager_profile.c
 endif
 
 ifeq ($(CONFIG_LWNL80211), y)
 CSRCS += wifi_manager_lwnl.c
 CSRCS += wifi_manager_lwnl_listener.c
-else
-ifeq ($(CONFIG_SELECT_NO_DRIVER), y)
-CSRCS += virtual_wifi_utils.c
-endif
 endif
 
 DEPPATH += --dep-path src/wifi_manager

@@ -76,9 +76,11 @@
  ****************************************************************************/
 enum {
 	ALLOC_TEXT,
+#ifdef CONFIG_BINFMT_CONSTRUCTORS
 	ALLOC_CTOR,
 	ALLOC_DTOR,
-#ifdef CONFIG_APP_BINARY_SEPARATION
+#endif
+#ifdef CONFIG_OPTIMIZE_APP_RELOAD_TIME
 	ALLOC_RO,
 	ALLOC_DATA,
 #endif
@@ -209,6 +211,11 @@ struct binfmt_s {
 /****************************************************************************
  * Public Data
  ****************************************************************************/
+
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+/* A binary data of common library */
+extern struct binary_s *g_lib_binp;
+#endif
 
 #if defined(__cplusplus)
 extern "C" {

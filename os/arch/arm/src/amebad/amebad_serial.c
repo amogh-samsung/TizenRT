@@ -85,6 +85,8 @@
 #include "mbed/targets/hal/rtl8721d/objects.h"
 #include "rtl8721d_uart.h"
 #include "tinyara/kmalloc.h"
+#include "osdep_service.h"
+
 /****************************************************************************
  * Preprocessor Definitions
  ****************************************************************************/
@@ -106,16 +108,19 @@
 #if defined(CONFIG_UART0_SERIAL_CONSOLE)
 #define CONSOLE_DEV             g_uart0port             /* UART0 is console */
 #define TTYS0_DEV               g_uart0port             /* UART0 is ttyS0 */
+#define CONSOLE                 UART0_DEV
 #define UART0_ASSIGNED  1
 #define HAVE_SERIAL_CONSOLE
 #elif defined(CONFIG_UART1_SERIAL_CONSOLE)
 #define CONSOLE_DEV             g_uart1port             /* UART1 is console */
 #define TTYS0_DEV               g_uart1port             /* UART1 is ttyS0 */
+#define CONSOLE                 UART1_DEV
 #define UART1_ASSIGNED  1
 #define HAVE_SERIAL_CONSOLE
 #elif defined(CONFIG_UART2_SERIAL_CONSOLE)
 #define CONSOLE_DEV             g_uart2port             /* UART2 is console */
 #define TTYS0_DEV               g_uart2port             /* UART2 is ttyS0 */
+#define CONSOLE                 UART2_DEV
 #define UART2_ASSIGNED  1
 #define HAVE_SERIAL_CONSOLE
 #else
@@ -156,6 +161,7 @@
 #define TTYS2_DEV               g_uart2port             /* UART2 is ttyS2 */
 #define UART2_ASSIGNED  1
 #endif
+#define CHAR_TIMEOUT 6540
 
 /****************************************************************************
  * Private Types
@@ -372,6 +378,25 @@ static u32 uart_index_get(PinName tx)
 	return 3;
 }
 
+static void LOGUART_PutChar_RAM(u8 c)
+{
+	UART_TypeDef* LOGUART = CONSOLE;
+	u32 CounterIndex = 0;
+
+	if (ConfigDebugClose == 1)
+		return;
+
+	while(1) {
+		CounterIndex++;
+		if (CounterIndex >= CHAR_TIMEOUT)
+			break;
+
+		if (LOGUART->LSR & RUART_LINE_STATUS_REG_THRE)
+			break;
+	}
+	LOGUART->RB_THR = c;
+}
+
 /****************************************************************************
  * Name: rtl8721d_up_setup
  *
@@ -412,7 +437,7 @@ static void rtl8721d_up_shutdown(struct uart_dev_s *dev)
 	DEBUGASSERT(priv);
 	DEBUGASSERT(sdrv[uart_index_get(priv->tx)]);
 	serial_free(sdrv[uart_index_get(priv->tx)]);
-	free(sdrv[uart_index_get(priv->tx)]);
+	rtw_free(sdrv[uart_index_get(priv->tx)]);
 	sdrv[uart_index_get(priv->tx)] = NULL;
 }
 
@@ -435,7 +460,6 @@ static void rtl8721d_up_shutdown(struct uart_dev_s *dev)
 void rtl8721d_uart_irq(uint32_t id, SerialIrq event)
 {
 	struct uart_dev_s *dev = (struct uart_dev_s *)id;
-	struct rtl8721d_up_dev_s *priv = (struct rtl8721d_up_dev_s *)dev->priv;
 	if (event == RxIrq) {
 		uart_recvchars(dev);
 	}
@@ -688,11 +712,14 @@ void up_serialinit(void)
 	UART_DeInit(UART2_DEV);
 	UART_ClearRxFifo(UART2_DEV);
 	UART_ClearTxFifo(UART2_DEV);
+
+#ifdef CONSOLE_DEV
 	CONSOLE_DEV.isconsole = true;
 	rtl8721d_up_setup(&CONSOLE_DEV);
 
 	/* Register the console */
 	uart_register("/dev/console", &CONSOLE_DEV);
+#endif
 
 	/* Register all UARTs */
 #ifdef TTYS0_DEV
@@ -722,7 +749,7 @@ void up_serialinit(void)
  ****************************************************************************/
 void up_lowputc(char ch)
 {
-	LOGUART_PutChar(ch);
+	LOGUART_PutChar_RAM(ch);
 }
 
 /****************************************************************************

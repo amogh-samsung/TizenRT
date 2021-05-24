@@ -145,8 +145,8 @@ static void stm32l4_dumpnvic(const char *msg, int irq)
 #endif
 
 /****************************************************************************
- * Name: stm32l4_nmi, stm32l4_busfault, stm32l4_usagefault, stm32l4_pendsv,
- *       stm32l4_dbgmonitor, stm32l4_pendsv, stm32l4_reserved
+ * Name: stm32l4_nmi, stm32l4_pendsv, stm32l4_dbgmonitor,
+ *       stm32l4_pendsv, stm32l4_reserved
  *
  * Description:
  *   Handlers for various execptions.  None are handled and all are fatal
@@ -160,22 +160,6 @@ static int stm32l4_nmi(int irq, FAR void *context, FAR void *arg)
 {
   (void)irqsave();
   dbg("PANIC!!! NMI received\n");
-  PANIC();
-  return 0;
-}
-
-static int stm32l4_busfault(int irq, FAR void *context, FAR void *arg)
-{
-  (void)irqsave();
-  dbg("PANIC!!! Bus fault received: %08x\n", getreg32(NVIC_CFAULTS));
-  PANIC();
-  return 0;
-}
-
-static int stm32l4_usagefault(int irq, FAR void *context, FAR void *arg)
-{
-  (void)irqsave();
-  dbg("PANIC!!! Usage fault received: %08x\n", getreg32(NVIC_CFAULTS));
   PANIC();
   return 0;
 }
@@ -373,20 +357,19 @@ void up_irqinitialize(void)
    * Fault handler.
    */
 
-#ifdef CONFIG_ARM_MPU
+#ifdef CONFIG_ARMV7M_MPU
   irq_attach(STM32L4_IRQ_MEMFAULT, up_memfault, NULL);
   up_enable_irq(STM32L4_IRQ_MEMFAULT);
+#else
+  irq_attach(STM32L4_IRQ_MEMFAULT, up_memfault, NULL);
 #endif
+  irq_attach(STM32L4_IRQ_BUSFAULT, up_busfault, NULL);
+  irq_attach(STM32L4_IRQ_USAGEFAULT, up_usagefault, NULL);
 
   /* Attach all other processor exceptions (except reset and sys tick) */
 
 #ifdef CONFIG_DEBUG
   irq_attach(STM32L4_IRQ_NMI, stm32l4_nmi, NULL);
-#ifndef CONFIG_ARM_MPU
-  irq_attach(STM32L4_IRQ_MEMFAULT, up_memfault, NULL);
-#endif
-  irq_attach(STM32L4_IRQ_BUSFAULT, stm32l4_busfault, NULL);
-  irq_attach(STM32L4_IRQ_USAGEFAULT, stm32l4_usagefault, NULL);
   irq_attach(STM32L4_IRQ_PENDSV, stm32l4_pendsv, NULL);
   irq_attach(STM32L4_IRQ_DBGMONITOR, stm32l4_dbgmonitor, NULL);
   irq_attach(STM32L4_IRQ_RESERVED, stm32l4_reserved, NULL);

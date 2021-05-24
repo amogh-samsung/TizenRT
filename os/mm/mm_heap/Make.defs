@@ -56,13 +56,17 @@ CSRCS += mm_initialize.c mm_sem.c mm_addfreechunk.c mm_size2ndx.c
 CSRCS += mm_shrinkchunk.c
 CSRCS += mm_brkaddr.c mm_calloc.c mm_extend.c mm_free.c mm_mallinfo.c
 CSRCS += mm_malloc.c mm_memalign.c mm_realloc.c mm_zalloc.c mm_heap_regioninfo.c mm_getheap.c
+CSRCS += mm_check_heap_corruption.c
 
 ifeq ($(CONFIG_BUILD_KERNEL),y)
 CSRCS += mm_sbrk.c
 endif
 
 ifeq ($(CONFIG_DEBUG_MM_HEAPINFO),y)
-CSRCS += mm_heapinfo.c
+CSRCS += mm_heapinfo_parse_heap.c mm_heapinfo_utils.c
+ifeq ($(CONFIG_HEAPINFO_USER_GROUP),y)
+CSRCS += mm_heapinfo_group.c
+endif
 endif
 
 # Add the core heap directory to the build

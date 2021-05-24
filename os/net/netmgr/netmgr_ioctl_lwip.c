@@ -23,10 +23,12 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netdb.h>
+#include <ifaddrs.h>
 #include <tinyara/kmalloc.h>
 #include <tinyara/netmgr/netdev_mgr.h>
 #include <net/if.h>
 #include "netdev_mgr_internal.h"
+#include "netdev_stats.h"
 #include "lwip/opt.h"
 #include "lwip/netif.h"
 #include "lwip/netdb.h"
@@ -56,6 +58,31 @@ static struct netif *_netdev_dhcp_dev(FAR const char *intf)
 	return cnif;
 }
 #endif
+
+static int _netdev_set_dnsserver(struct sockaddr *addr, int index)
+{
+	ip_addr_t dns_addr;
+	struct sockaddr_in *iaddr = (struct sockaddr_in *)addr;
+	ip_addr_set_ip4_u32(&dns_addr, iaddr->sin_addr.s_addr);
+	if (index > 0) {
+		if (index >= CONFIG_NET_DNS_MAX_SERVERS) {
+			return -2;
+		} else {
+			dns_setserver(index, &dns_addr);
+			return 0;
+		}
+	}
+	/* Set DNS server to available slot.*/
+	for (int i = 0; i < CONFIG_NET_DNS_MAX_SERVERS; i++) {
+		if (ip_addr_isany_val(*(dns_getserver(i)))) {
+			dns_setserver(i, &dns_addr);
+			return 0;
+		} else if (ip_addr_cmp(dns_getserver(i), &dns_addr)) {
+			return 0;
+		}
+	}
+	return -3;
+}
 
 /**********************************************************
  * Private Function
@@ -220,14 +247,14 @@ static struct addrinfo *_netdev_copy_addrinfo(struct addrinfo *src)
 		memcpy(dst->ai_addr, tmp->ai_addr, sizeof(struct sockaddr));
 
 		if (tmp->ai_canonname) {
-			dst->ai_canonname = (char *)kumm_malloc(sizeof(tmp->ai_canonname));
+			dst->ai_canonname = (char *)kumm_malloc(strlen(tmp->ai_canonname) + 1);
 			if (!dst->ai_canonname) {
 				ndbg("kumm_malloc failed\n");
 				kumm_free(dst->ai_addr);
 				kumm_free(dst);
 				break;
 			}
-			memcpy(dst->ai_canonname, tmp->ai_canonname, sizeof(tmp->ai_canonname));
+			memcpy(dst->ai_canonname, tmp->ai_canonname, strlen(tmp->ai_canonname) + 1);
 		} else {
 			dst->ai_canonname = NULL;
 		}
@@ -251,6 +278,14 @@ static int _netdev_free_addrinfo(struct addrinfo *ai)
 
 	while (ai != NULL) {
 		next = ai->ai_next;
+		if (ai->ai_addr) {
+			kumm_free(ai->ai_addr);
+			ai->ai_addr = NULL;
+		}
+		if (ai->ai_canonname) {
+			kumm_free(ai->ai_canonname);
+			ai->ai_canonname = NULL;
+		}
 		kumm_free(ai);
 		ai = next;
 	}
@@ -276,8 +311,8 @@ static int _netdev_free_addrinfo(struct addrinfo *ai)
 static int lwip_func_ioctl(int s, int cmd, void *arg)
 {
 	int ret = -EINVAL;
-	ndbg("Enter %d\n");
-	struct lwip_sock *sock = get_socket(s);
+
+	struct lwip_sock *sock = get_socket(s, getpid());
 	if (!sock) {
 		ret = -EBADF;
 		return ret;
@@ -303,6 +338,7 @@ static int lwip_func_ioctl(int s, int cmd, void *arg)
 			ret = -EINVAL;
 		} else {
 			req->ai_res = _netdev_copy_addrinfo(res);
+			lwip_freeaddrinfo(res);
 			ret = OK;
 		}
 		break;
@@ -311,7 +347,7 @@ static int lwip_func_ioctl(int s, int cmd, void *arg)
 		ret = OK;
 		break;
 	case DNSSETSERVER:
-		dns_setserver(req->num_dns, req->dns_server);
+		req->req_res = _netdev_set_dnsserver(req->addr, req->index);
 		ret = OK;
 		break;
 	case GETHOSTBYNAME:
@@ -420,6 +456,12 @@ static int lwip_func_ioctl(int s, int cmd, void *arg)
 	}
 #endif // CONFIG_LWIP_DHCPS
 #endif // CONFIG_NET_LWIP_DHCP
+	case GETNETSTATS: {
+		stats_display();
+		netstats_display();
+		ret = OK;
+		break;
+	}
 	default:
 		ndbg("Wrong request type: %d\n", req->type);
 		break;

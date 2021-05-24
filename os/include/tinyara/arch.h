@@ -429,7 +429,7 @@ void up_allocate_secure_context(TZ_ModuleId_t size);
  *
  ****************************************************************************/
 
-void up_free_secure_context(TZ_MemoryId_t handle);
+void up_free_secure_context();
 #endif
 
 /****************************************************************************
@@ -1509,7 +1509,7 @@ void up_timer_initialize(void);
  *   any failure.
  *
  * Assumptions:
- *   Called from the the normal tasking context.  The implementation must
+ *   Called from the normal tasking context.  The implementation must
  *   provide whatever mutual exclusion is necessary for correct operation.
  *   This can include disabling interrupts in order to assure atomic register
  *   operations.
@@ -2070,7 +2070,7 @@ xcpt_t board_button_irq(int id, xcpt_t irqhandler);
  *      and SIOCSMIIREG ioctl calls** to communicate with the PHY,
  *      determine what network event took place (Link Up/Down?), and
  *      take the appropriate actions.
- *   d. It should then interact the the PHY to clear any pending
+ *   d. It should then interact the PHY to clear any pending
  *      interrupts, then re-enable the PHY interrupt.
  *
  *    * This is an OS internal interface and should not be used from
@@ -2179,6 +2179,24 @@ void up_wdog_keepalive(void);
 
 #endif
 
+/****************************************************************************
+ * Name: is_kernel_text_space
+ *
+ * Description:
+ *   Check the address is in kernel text space or not
+ *
+ ****************************************************************************/
+bool is_kernel_text_space(void *addr);
+
+/****************************************************************************
+ * Name: is_kernel_data_space
+ *
+ * Description:
+ *   Check the address is in kernel data space or not
+ *
+ ****************************************************************************/
+bool is_kernel_data_space(void *addr);
+
 #ifdef CONFIG_BUILD_PROTECTED
 /****************************************************************************
  * Name: is_kernel_space
@@ -2188,6 +2206,18 @@ void up_wdog_keepalive(void);
  *
  ****************************************************************************/
 bool is_kernel_space(void *addr);
+
+#ifdef CONFIG_SUPPORT_COMMON_BINARY
+/****************************************************************************
+ * Name: is_common_library_space
+ *
+ * Description:
+ *   Check the address is in common library space or not
+ *
+ ****************************************************************************/
+bool is_common_library_space(void *addr);
+
+#endif
 #endif
 
 #undef EXTERN

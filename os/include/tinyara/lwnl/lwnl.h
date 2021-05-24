@@ -23,27 +23,6 @@
  ****************************************************************************/
 #define LWNL_PATH "/dev/lwnl"
 
-#define LWNL_TAG "[LWNL]"
-
-#define LWNL_ERR										\
-	do {												\
-		nldbg(LWNL_TAG"[ERR] %s: %d line err(%s)\n",	\
-			  __FILE__, __LINE__, strerror(errno));		\
-	} while (0)
-
-#define LWNL_ENTER											\
-	do {													\
-		nldbg(LWNL_TAG"--->%s:%d\n", __FILE__, __LINE__);	\
-	} while (0)
-
-#define LWNL_LEAVE											\
-	do {													\
-		nldbg(LWNL_TAG"<---%s:%d\n", __FILE__, __LINE__);	\
-	} while (0)
-
-
-
-
 /* Light-weight netlink domain definition */
 #define AF_LWNL 3
 
@@ -74,6 +53,9 @@ typedef struct {
 } lwnl_data;
 
 typedef enum {
+	// common
+	LWNL_GET_ADDR_INFO,
+	// wifi
 	LWNL_INIT,
 	LWNL_DEINIT,
 	LWNL_SCAN_AP,

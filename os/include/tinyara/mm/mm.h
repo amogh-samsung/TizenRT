@@ -201,6 +201,8 @@
 #define HEAPINFO_ADD_INFO 1
 #define HEAPINFO_DEL_INFO 2
 
+#define HEAPINFO_INVALID_GROUPID -1
+
 #define HEAPINFO_HEAP_TYPE_KERNEL 1
 #ifdef CONFIG_APP_BINARY_SEPARATION
 #define HEAPINFO_HEAP_TYPE_BINARY    2
@@ -341,6 +343,13 @@ struct heapinfo_group_s {
 	int heap_size;
 };
 #endif
+
+#ifdef CONFIG_HEAPINFO_USER_GROUP
+extern int heapinfo_max_group;
+extern struct heapinfo_group_s heapinfo_group[HEAPINFO_USER_GROUP_NUM];
+extern struct heapinfo_group_info_s group_info[HEAPINFO_THREAD_NUM];
+#endif
+
 #endif
 /* This describes one heap (possibly with multiple regions) */
 
@@ -432,8 +441,8 @@ extern uint32_t g_cur_app;
 
 /* Functions contained in mm_initialize.c ***********************************/
 
-void mm_initialize(FAR struct mm_heap_s *heap, FAR void *heap_start, size_t heap_size);
-void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsize);
+int mm_initialize(FAR struct mm_heap_s *heap, FAR void *heap_start, size_t heap_size);
+int mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsize);
 
 /* Functions contained in umm_initialize.c **********************************/
 
@@ -441,20 +450,20 @@ void mm_addregion(FAR struct mm_heap_s *heap, FAR void *heapstart, size_t heapsi
 /* Functions contained in kmm_initialize.c **********************************/
 
 #ifdef CONFIG_MM_KERNEL_HEAP
-void kmm_initialize(FAR void *heap_start, size_t heap_size);
+int kmm_initialize(FAR void *heap_start, size_t heap_size);
 #endif
 
 /* Functions contained in umm_addregion.c ***********************************/
 
 #if !defined(CONFIG_BUILD_PROTECTED) || !defined(__KERNEL__)
-void umm_initialize(FAR void *heap_start, size_t heap_size);
-void umm_addregion(FAR void *heapstart, size_t heapsize);
+int umm_initialize(FAR void *heap_start, size_t heap_size);
+int umm_addregion(FAR void *heapstart, size_t heapsize);
 #endif
 
 /* Functions contained in kmm_addregion.c ***********************************/
 
 #ifdef CONFIG_MM_KERNEL_HEAP
-void kmm_addregion(FAR void *heapstart, size_t heapsize);
+int kmm_addregion(FAR void *heapstart, size_t heapsize);
 #endif
 
 /* Functions contained in mm_sem.c ******************************************/
@@ -661,7 +670,7 @@ int mm_size2ndx(size_t size);
 
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 /* Functions contained in kmm_mallinfo.c . Used to display memory allocation details */
-void heapinfo_parse(FAR struct mm_heap_s *heap, int mode, pid_t pid);
+void heapinfo_parse_heap(FAR struct mm_heap_s *heap, int mode, pid_t pid);
 /* Funciton to add memory allocation info */
 void heapinfo_update_node(FAR struct mm_allocnode_s *node, mmaddress_t caller_retaddr);
 
@@ -670,7 +679,9 @@ void heapinfo_subtract_size(struct mm_heap_s *heap, pid_t pid, mmsize_t size);
 void heapinfo_update_total_size(struct mm_heap_s *heap, mmsize_t size, pid_t pid);
 void heapinfo_exclude_stacksize(void *stack_ptr);
 void heapinfo_peak_init(struct mm_heap_s *heap);
+void heapinfo_dealloc_tcbinfo(void *address, pid_t pid);
 #ifdef CONFIG_HEAPINFO_USER_GROUP
+void heapinfo_update_group(mmsize_t size, pid_t pid);
 void heapinfo_update_group_info(pid_t pid, int group, int type);
 void heapinfo_check_group_list(pid_t pid, char *name);
 #endif
@@ -692,39 +703,14 @@ struct mm_heap_s *mm_get_app_heap_with_name(char *app_name);
 char *mm_get_app_heap_name(void *address);
 #endif
 
-#if CONFIG_KMM_NHEAPS > 1
-struct heapinfo_total_info_s {
-	int total_heap_size;
-	int cur_free;
-	int largest_free_size;
-	int cur_dead_thread;
-	int sum_of_stacks;
-	int sum_of_heaps;
-	int cur_alloc_size;
-	int peak_alloc_size;
-};
-typedef struct heapinfo_total_info_s heapinfo_total_info_t;
+/* Function to check heap corruption */
+int mm_check_heap_corruption(struct mm_heap_s *heap);
 
+#if CONFIG_KMM_NHEAPS > 1
 /**
  * @cond
  * @internal
  */
-#ifdef CONFIG_MM_KERNEL_HEAP
-#if CONFIG_KMM_NHEAPS > 1
-void *kmm_malloc_at(int heap_index, size_t size);
-void *kmm_calloc_at(int heap_index, size_t n, size_t elem_size);
-void *kmm_memalign_at(int heap_index, size_t alignment, size_t size);
-void *kmm_realloc_at(int heap_index, void *oldmem, size_t size);
-void *kmm_zalloc_at(int heap_index, size_t size);
-#else
-#define kmm_malloc_at(heap_index, size)              kmm_malloc(size)
-#define kmm_calloc_at(heap_index, n, elem_size)      kmm_calloc(n, elem_size)
-#define kmm_memalign_at(heap_index, alignment, size) kmm_memalign(alignment, size)
-#define kmm_realloc_at(heap_index, oldmem, size)     kmm_realloc(oldmem, size)
-#define kmm_zalloc_at(heap_index, size)              kmm_zalloc(size)
-#endif
-#endif
-
 /**
  * @brief Allocate memory to the specific heap.
  * @details @b #include <tinyara/mm/mm.h>\n
@@ -799,6 +785,22 @@ void *zalloc_at(int heap_index, size_t size);
 /**
  * @endcond
  */
+
+#ifdef CONFIG_MM_KERNEL_HEAP
+#if CONFIG_KMM_NHEAPS > 1
+void *kmm_malloc_at(int heap_index, size_t size);
+void *kmm_calloc_at(int heap_index, size_t n, size_t elem_size);
+void *kmm_memalign_at(int heap_index, size_t alignment, size_t size);
+void *kmm_realloc_at(int heap_index, void *oldmem, size_t size);
+void *kmm_zalloc_at(int heap_index, size_t size);
+#else
+#define kmm_malloc_at(heap_index, size)              kmm_malloc(size)
+#define kmm_calloc_at(heap_index, n, elem_size)      kmm_calloc(n, elem_size)
+#define kmm_memalign_at(heap_index, alignment, size) kmm_memalign(alignment, size)
+#define kmm_realloc_at(heap_index, oldmem, size)     kmm_realloc(oldmem, size)
+#define kmm_zalloc_at(heap_index, size)              kmm_zalloc(size)
+#endif
+#endif
 
 static inline uint32_t mm_align_up_by_size(uint32_t address, uint32_t size)
 {

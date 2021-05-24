@@ -71,13 +71,13 @@ MEMORY
 	MSP_RAM_S (rwx)  : 		ORIGIN = 0x1007F000, LENGTH = 0x10080000 - 0x1007F000	/* MSP_S RAM: 4k */
 	EXTENTION_SRAM (rwx)  : 		ORIGIN = 0x100E0000, LENGTH = 0x10100000 - 0x100E0000	/* EXTENTION SRAM: 128k */
 
-	PSRAM_NS (rwx)  : 		ORIGIN = 0x02000000, LENGTH = 0x02300000 - 0x02000000	/* PSRAM_NS: 3M */
-	PSRAM_S (rwx)	:		ORIGIN = 0x02300000, LENGTH = 0x02400000 - 0x02300000	/* PSRAM_S: 1M */
+	PSRAM_NS (rwx)  : 		ORIGIN = 0x02000000, LENGTH = 0x023C0000 - 0x02000000	/* PSRAM_NS: 3M 744K*/
+	PSRAM_S (rwx)	:		ORIGIN = 0x023C0000, LENGTH = 0x02400000 - 0x023C0000	/* PSRAM_S: 256K */
 
 	/* Flash */
-	KM0_BOOT (rx)  :		ORIGIN = 0x08000000+0x20, LENGTH = 0x02000-0x20	/* XIPBOOT: 8k, 32 Bytes resvd for header*/
-	BACKUP (r) :			ORIGIN = 0x08002000, LENGTH = 0x1000	/* BACKUP: 4K system data in flash */
-	XIPSYS (r) :			ORIGIN = 0x08003000, LENGTH = 0x1000	/* XIPSYS: 4K system data in flash */
+	KM0_BOOT (rx)  :		ORIGIN = 0x08000000+0x20, LENGTH = 0x04000-0x20	/* XIPBOOT: 16k, 32 Bytes resvd for header*/
+	BACKUP (r) :			ORIGIN = 0x08080000, LENGTH = 0x1000	/* BACKUP: 4K system data in flash */
+	XIPSYS (r) :			ORIGIN = 0x08081000, LENGTH = 0x1000	/* XIPSYS: 4K system data in flash */
 	KM4_BOOT (rx)  :		ORIGIN = 0x08004000+0x20, LENGTH = 0x02000-0x20	/* XIPBOOT: 8k, 32 Bytes resvd for header*/
 	KM0_IMG2 (rx)  : 		ORIGIN = 0x0C000000+0x20, LENGTH = 0x02000000-0x20	/* KM0_IMG2: 32MB, 32 Bytes resvd for header, virtual address */
 	KM4_IMG2 (rx)  : 		ORIGIN = 0x0E000000+0x20, LENGTH = 0x02000000-0x20	/* KM4_IMG2 OTA1: 32MB, 32 Bytes resvd for header,  virtual address */
@@ -109,11 +109,163 @@ SECTIONS
 
 	.ram_image2.text :
 	{
-		_stext = ABSOLUTE(.);
+		__ram_text_start__ = .;
+		_stext_ram = ABSOLUTE(.);
 		*(.image2.ram.text*)
 		*(.image2.net.ram.text*)
-		_etext = ABSOLUTE(.);
-		__ram_image2_text_end__ = .;
+		/*os*/
+		*os_start.o (.text*)
+		*osdep_service.o (.text*)
+		*tizenrt_service.o (.text*)
+		/*irq(svcall)*/
+		/**irq_initialize.o (.text*)*/
+		*amebad_irq.o (.text*)
+		*up_exception.o (.text*)
+		*up_svcall.o (.text*)
+		*up_switchcontext.o (.text*)
+		*up_copyfullstate.o (.text*)
+		*up_fullcontextrestore.o (.text*)
+		*up_doirq.o (.text*)
+		*irq_dispatch.o (.text*)
+		/*scheduler(for semphr)*/
+		*sched_addreadytorun.o (.text*)
+		*sched_addblocked.o (.text*)
+		*sched_addprioritized.o (.text*)
+		*sched_removereadytorun.o (.text*)
+		*sched_removeblocked.o (.text*)
+		*sched_mergepending.o (.text*)
+		*up_blocktask.o (.text*)
+		*up_unblocktask.o (.text*)
+		/*semphr*/
+		*sem_wait.o (.text*)
+		*sem_waitirq.o (.text*)
+		*sem_trywait.o (.text*)
+		*sem_tickwait.o (.text*)
+		*sem_timedwait.o (.text*)
+		*sem_post.o (.text*)
+		/* driver */
+		*ethernetif_tizenrt.o (.text*)
+		*lwip_intf_tizenrt.o (.text*)
+		/*lwip*/
+		*randm.o (.text*)
+		*netifapi.o (.text*)
+		*snmp_mib2_interfaces.o (.text*)
+		*snmp_raw.o (.text*)
+		*icmp.o (.text*)
+		*ip4.o (.text*)
+		*dhcp.o (.text*)
+		*udp.o (.text*)
+		*snmp_mib2.o (.text*)
+		*etharp.o (.text*)
+		*netmgr_ioctl_lwip.o (.text*)
+		*dhcps.o (.text*)
+		*snmp_traps.o (.text*)
+		*tcp.o (.text*)
+		*net_initialize_netmgr.o (.text*)
+		*def.o (.text*)
+		*nd6.o (.text*)
+		*raw.o (.text*)
+		*tcp_out.o (.text*)
+		*netstack_lwip.o (.text*)
+		*memp.o (.text*)
+		*netdev_wifi.o (.text*)
+		*lwip_md5.o (.text*)
+		*snmp_mib2_udp.o (.text*)
+		*netmgr_ioctl_netmon.o (.text*)
+		*snmp_msg.o (.text*)
+		*sys_arch.o (.text*)
+		*igmp.o (.text*)
+		*api_lib.o (.text*)
+		*pbuf.o (.text*)
+		*netdev_eth.o (.text*)
+		*netdev_stats.o (.text*)
+		*ip4_addr.o (.text*)
+		*mem.o (.text*)
+		*dns.o (.text*)
+		*snmp_threadsync.o (.text*)
+		*netmgr_ioctl_netdev.o (.text*)
+		*snmp_mib2_system.o (.text*)
+		*netdev_lwnl.o (.text*)
+		*ppp_oe.o (.text*)
+		*stats.o (.text*)
+		*api_msg.o (.text*)
+		*netstack_lwnl.o (.text*)
+		*sys.o (.text*)
+		*inet_chksum.o (.text*)
+		*netdb.o (.text*)
+		*net_vfs.o (.text*)
+		*slipif.o (.text*)
+		*ip6_addr.o (.text*)
+		*inet6.o (.text*)
+		*snmp_mib2_snmp.o (.text*)
+		*pap.o (.text*)
+		*netdev_mgr.o (.text*)
+		*snmp_mib2_ip.o (.text*)
+		*netstack.o (.text*)
+		*fsm.o (.text*)
+		*tcp_in.o (.text*)
+		*err.o (.text*)
+		*snmp_netconn.o (.text*)
+		*chpms.o (.text*)
+		*ethernet.o (.text*)
+		*netif.o (.text*)
+		*snmp_mib2_tcp.o (.text*)
+		*ipcp.o (.text*)
+		*chap.o (.text*)
+		*timeouts.o (.text*)
+		*vj.o (.text*)
+		*magic.o (.text*)
+		*ppp.o (.text*)
+		*autoip.o (.text*)
+		*snmp_mib2_icmp.o (.text*)
+		*ip6.o (.text*)
+		*sockets.o (.text*)
+		*ethip6.o (.text*)
+		*snmp_asn1.o (.text*)
+		*netdev_mgr_internal.o (.text*)
+		*snmp_pbuf_stream.o (.text*)
+		*ip4_frag.o (.text*)
+		*netdev_lwip.o (.text*)
+		*bsd_socket_api.o (.text*)
+		*ip6_frag.o (.text*)
+		*init.o (.text*)
+		*mld6.o (.text*)
+		*lcp.o (.text*)
+		*snmp_table.o (.text*)
+		*snmp_core.o (.text*)
+		*auth.o (.text*)
+		*netbuf.o (.text*)
+		*snmp_scalar.o (.text*)
+		*icmp6.o (.text*)
+		*ip.o (.text*)
+		*tcpip.o (.text*)
+		/*iperf*/
+		/* *iperf_tcp.o (.text*) */
+		/* *iperf_timer.o (.text*) */
+		/* *iperf_t_timer.o (.text*) */
+		/* *iperf_units.o (.text*) */
+		/* *iperf_util.o (.text*) */
+		/* *iperf_locale.o (.text*) */
+		/* *iperf_net.o (.text*) */
+		/* *iperf_tcp_info.o (.text*) */
+		/* *iperf_client_api.o (.text*) */
+		/* *iperf_api.o (.text*) */
+		/* *iperf_server_api.o (.text*) */
+		/* *iperf_error.o (.text*) */
+		/* *iperf_main.o (.text*) */
+		/* *iperf_udp.o (.text*) */
+		/* *iperf_server_api.o (.text*) */
+		/* *iperf_api.o (.text*) */
+		/*fs*/
+		/**fs_read.o (.text*)
+		*fs_select.o (.text*)
+		*fs_poll.o (.text*)*/
+		/*others*/
+		*lib_vikmemcpy.o (.text*)
+		*dq_rem.o (.text*)
+		*dq_addlast.o (.text*)
+		_etext_ram = ABSOLUTE(.);
+		__ram_text_end__ = .;
 	} > BD_RAM_NS
 
 	_eronly = ABSOLUTE(.);
@@ -122,11 +274,339 @@ SECTIONS
 	{
 		_sdata = ABSOLUTE(.);
 		__data_start__ = .;
-		*(.data*)
+		/*os*/
+		*os_start.o (.data*)
+		*osdep_service.o (.data*)
+		*tizenrt_service.o (.data*)
+		/*irq(svcall)*/
+		/**irq_initialize.o (.data*)*/
+		*amebad_irq.o (.data*)
+		*up_exception.o (.data*)
+		*up_svcall.o (.data*)
+		*up_switchcontext.o (.data*)
+		*up_copyfullstate.o (.data*)
+		*up_fullcontextrestore.o (.data*)
+		*up_doirq.o (.data*)
+		*irq_dispatch.o (.data*)
+		/*scheduler(for semphr)*/
+		*sched_addreadytorun.o (.data*)
+		*sched_addblocked.o (.data*)
+		*sched_addprioritized.o (.data*)
+		*sched_removereadytorun.o (.data*)
+		*sched_removeblocked.o (.data*)
+		*sched_mergepending.o (.data*)
+		*up_blocktask.o (.data*)
+		*up_unblocktask.o (.data*)
+		/*semphr*/
+		*sem_wait.o (.data*)
+		*sem_waitirq.o (.data*)
+		*sem_trywait.o (.data*)
+		*sem_tickwait.o (.data*)
+		*sem_timedwait.o (.data*)
+		*sem_post.o (.data*)
+		/* driver */
+		*ethernetif_tizenrt.o (.data*)
+		*lwip_intf_tizenrt.o (.data*)
+		/*lwip*/
+		*randm.o (.data*)
+		*netifapi.o (.data*)
+		*snmp_mib2_interfaces.o (.data*)
+		*snmp_raw.o (.data*)
+		*icmp.o (.data*)
+		*ip4.o (.data*)
+		*dhcp.o (.data*)
+		*udp.o (.data*)
+		*snmp_mib2.o (.data*)
+		*etharp.o (.data*)
+		*netmgr_ioctl_lwip.o (.data*)
+		*dhcps.o (.data*)
+		*snmp_traps.o (.data*)
+		*tcp.o (.data*)
+		*net_initialize_netmgr.o (.data*)
+		*def.o (.data*)
+		*nd6.o (.data*)
+		*raw.o (.data*)
+		*tcp_out.o (.data*)
+		*netstack_lwip.o (.data*)
+		*memp.o (.data*)
+		*netdev_wifi.o (.data*)
+		*lwip_md5.o (.data*)
+		*snmp_mib2_udp.o (.data*)
+		*netmgr_ioctl_netmon.o (.data*)
+		*snmp_msg.o (.data*)
+		*sys_arch.o (.data*)
+		*igmp.o (.data*)
+		*api_lib.o (.data*)
+		*pbuf.o (.data*)
+		*netdev_eth.o (.data*)
+		*netdev_stats.o (.data*)
+		*ip4_addr.o (.data*)
+		*mem.o (.data*)
+		*dns.o (.data*)
+		*snmp_threadsync.o (.data*)
+		*netmgr_ioctl_netdev.o (.data*)
+		*snmp_mib2_system.o (.data*)
+		*netdev_lwnl.o (.data*)
+		*ppp_oe.o (.data*)
+		*stats.o (.data*)
+		*api_msg.o (.data*)
+		*netstack_lwnl.o (.data*)
+		*sys.o (.data*)
+		*inet_chksum.o (.data*)
+		*netdb.o (.data*)
+		*net_vfs.o (.data*)
+		*slipif.o (.data*)
+		*ip6_addr.o (.data*)
+		*inet6.o (.data*)
+		*snmp_mib2_snmp.o (.data*)
+		*pap.o (.data*)
+		*netdev_mgr.o (.data*)
+		*snmp_mib2_ip.o (.data*)
+		*netstack.o (.data*)
+		*fsm.o (.data*)
+		*tcp_in.o (.data*)
+		*err.o (.data*)
+		*snmp_netconn.o (.data*)
+		*chpms.o (.data*)
+		*ethernet.o (.data*)
+		*netif.o (.data*)
+		*snmp_mib2_tcp.o (.data*)
+		*ipcp.o (.data*)
+		*chap.o (.data*)
+		*timeouts.o (.data*)
+		*vj.o (.data*)
+		*magic.o (.data*)
+		*ppp.o (.data*)
+		*autoip.o (.data*)
+		*snmp_mib2_icmp.o (.data*)
+		*ip6.o (.data*)
+		*sockets.o (.data*)
+		*ethip6.o (.data*)
+		*snmp_asn1.o (.data*)
+		*netdev_mgr_internal.o (.data*)
+		*snmp_pbuf_stream.o (.data*)
+		*ip4_frag.o (.data*)
+		*netdev_lwip.o (.data*)
+		*bsd_socket_api.o (.data*)
+		*ip6_frag.o (.data*)
+		*init.o (.data*)
+		*mld6.o (.data*)
+		*lcp.o (.data*)
+		*snmp_table.o (.data*)
+		*snmp_core.o (.data*)
+		*auth.o (.data*)
+		*netbuf.o (.data*)
+		*snmp_scalar.o (.data*)
+		*icmp6.o (.data*)
+		*ip.o (.data*)
+		*tcpip.o (.data*)
+		/*others*/
+		*lib_vikmemcpy.o (.data*)
+		*dq_rem.o (.data*)
+		*dq_addlast.o (.data*)
+		/*Boot related*/
+		*rtl8721dhp_app_start.o (.data*)
+		*rtl8721dhp_system.o (.data*)
+		*rtl8721dhp_intfcfg.o (.data*)
+		*mm_heap_regioninfo.o (.data*)
+		/*Performance related*/
+		//*lib_wlan.a: (.data*)
+		*rtk_netmgr.o (.data*)
+		*wifi_conf.o (.data*)
+		*wifi_manager_lwnl_listener.o (.data*)
+		*wifi_manager_state.o (.data*)
+		*iperf_units.o (.data*)
+		*rtl8721d_wificfg.o (.data*)
+		*rtl8721dhp_psram.o (.data*)
+		*amebad_serial.o (.data*)
+		*rtw_mlme_ext.o (.data*)
+		*rtw_psk.o (.data*)
+		*rtw_sae.o (.data*)
+		*rtw_xmit.o (.data*)
+		*freertos_skbuff.o (.data*)
+		*wd_initialize.o (.data*)
+		*up_assert.o (.data*)
+		*amebad_enet.o (.data*)
+		*iperf_*.o (.data*)
+		*serial_api.o (.data*)
+		*mq_initialize.o (.data*)
+		*irq_initialize.o (.data*)
+		*sig_initialize.o (.data*)
+		*clock_initialize.o (.data*)
+		*kmm_initialize.o (.data*)
+		*kwork_hpthread.o (.data*)
+		*kwork_lpthread.o (.data*)
+		*rtl8721d_uart.o (.data*)
 		__data_end__ = .;
 		_edata = ABSOLUTE(.);
 		__ram_image2_text_end__ = .;
 		. = ALIGN(16);
+	} > BD_RAM_NS
+
+	.ram_image2.bss :
+	{
+		_sbss = ABSOLUTE(.);
+		__bss_start__ = .;
+		/*os*/
+		*os_start.o (.bss* COMMON)
+		*osdep_service.o (.bss* COMMON)
+		*tizenrt_service.o (.bss* COMMON)
+		/*irq(svcall)*/
+		/**irq_initialize.o (.bss* COMMON)*/
+		*amebad_irq.o (.bss* COMMON)
+		*up_exception.o (.bss* COMMON)
+		*up_svcall.o (.bss* COMMON)
+		*up_switchcontext.o (.bss* COMMON)
+		*up_copyfullstate.o (.bss* COMMON)
+		*up_fullcontextrestore.o (.bss* COMMON)
+		*up_doirq.o (.bss* COMMON)
+		*irq_dispatch.o (.bss* COMMON)
+		/*scheduler(for semphr)*/
+		*sched_addreadytorun.o (.bss* COMMON)
+		*sched_addblocked.o (.bss* COMMON)
+		*sched_addprioritized.o (.bss* COMMON)
+		*sched_removereadytorun.o (.bss* COMMON)
+		*sched_removeblocked.o (.bss* COMMON)
+		*sched_mergepending.o (.bss* COMMON)
+		*up_blocktask.o (.bss* COMMON)
+		*up_unblocktask.o (.bss* COMMON)
+		/*semphr*/
+		*sem_wait.o (.bss* COMMON)
+		*sem_waitirq.o (.bss* COMMON)
+		*sem_trywait.o (.bss* COMMON)
+		*sem_tickwait.o (.bss* COMMON)
+		*sem_timedwait.o (.bss* COMMON)
+		*sem_post.o (.bss* COMMON)
+		/* driver */
+		*ethernetif_tizenrt.o (.bss* COMMON)
+		*lwip_intf_tizenrt.o (.bss* COMMON)
+		/*lwip*/
+		*randm.o (.bss* COMMON)
+		*netifapi.o (.bss* COMMON)
+		*snmp_mib2_interfaces.o (.bss* COMMON)
+		*snmp_raw.o (.bss* COMMON)
+		*icmp.o (.bss* COMMON)
+		*ip4.o (.bss* COMMON)
+		*dhcp.o (.bss* COMMON)
+		*udp.o (.bss* COMMON)
+		*snmp_mib2.o (.bss* COMMON)
+		*etharp.o (.bss* COMMON)
+		*netmgr_ioctl_lwip.o (.bss* COMMON)
+		*dhcps.o (.bss* COMMON)
+		*snmp_traps.o (.bss* COMMON)
+		*tcp.o (.bss* COMMON)
+		*net_initialize_netmgr.o (.bss* COMMON)
+		*def.o (.bss* COMMON)
+		*nd6.o (.bss* COMMON)
+		*raw.o (.bss* COMMON)
+		*tcp_out.o (.bss* COMMON)
+		*netstack_lwip.o (.bss* COMMON)
+		*memp.o (.bss* COMMON)
+		*netdev_wifi.o (.bss* COMMON)
+		*lwip_md5.o (.bss* COMMON)
+		*snmp_mib2_udp.o (.bss* COMMON)
+		*netmgr_ioctl_netmon.o (.bss* COMMON)
+		*snmp_msg.o (.bss* COMMON)
+		*sys_arch.o (.bss* COMMON)
+		*igmp.o (.bss* COMMON)
+		*api_lib.o (.bss* COMMON)
+		*pbuf.o (.bss* COMMON)
+		*netdev_eth.o (.bss* COMMON)
+		*netdev_stats.o (.bss* COMMON)
+		*ip4_addr.o (.bss* COMMON)
+		*mem.o (.bss* COMMON)
+		*dns.o (.bss* COMMON)
+		*snmp_threadsync.o (.bss* COMMON)
+		*netmgr_ioctl_netdev.o (.bss* COMMON)
+		*snmp_mib2_system.o (.bss* COMMON)
+		*netdev_lwnl.o (.bss* COMMON)
+		*ppp_oe.o (.bss* COMMON)
+		*stats.o (.bss* COMMON)
+		*api_msg.o (.bss* COMMON)
+		*netstack_lwnl.o (.bss* COMMON)
+		*sys.o (.bss* COMMON)
+		*inet_chksum.o (.bss* COMMON)
+		*netdb.o (.bss* COMMON)
+		*net_vfs.o (.bss* COMMON)
+		*slipif.o (.bss* COMMON)
+		*ip6_addr.o (.bss* COMMON)
+		*inet6.o (.bss* COMMON)
+		*snmp_mib2_snmp.o (.bss* COMMON)
+		*pap.o (.bss* COMMON)
+		*netdev_mgr.o (.bss* COMMON)
+		*snmp_mib2_ip.o (.bss* COMMON)
+		*netstack.o (.bss* COMMON)
+		*fsm.o (.bss* COMMON)
+		*tcp_in.o (.bss* COMMON)
+		*err.o (.bss* COMMON)
+		*snmp_netconn.o (.bss* COMMON)
+		*chpms.o (.bss* COMMON)
+		*ethernet.o (.bss* COMMON)
+		*netif.o (.bss* COMMON)
+		*snmp_mib2_tcp.o (.bss* COMMON)
+		*ipcp.o (.bss* COMMON)
+		*chap.o (.bss* COMMON)
+		*timeouts.o (.bss* COMMON)
+		*vj.o (.bss* COMMON)
+		*magic.o (.bss* COMMON)
+		*ppp.o (.bss* COMMON)
+		*autoip.o (.bss* COMMON)
+		*snmp_mib2_icmp.o (.bss* COMMON)
+		*ip6.o (.bss* COMMON)
+		*sockets.o (.bss* COMMON)
+		*ethip6.o (.bss* COMMON)
+		*snmp_asn1.o (.bss* COMMON)
+		*netdev_mgr_internal.o (.bss* COMMON)
+		*snmp_pbuf_stream.o (.bss* COMMON)
+		*ip4_frag.o (.bss* COMMON)
+		*netdev_lwip.o (.bss* COMMON)
+		*bsd_socket_api.o (.bss* COMMON)
+		*ip6_frag.o (.bss* COMMON)
+		*init.o (.bss* COMMON)
+		*mld6.o (.bss* COMMON)
+		*lcp.o (.bss* COMMON)
+		*snmp_table.o (.bss* COMMON)
+		*snmp_core.o (.bss* COMMON)
+		*auth.o (.bss* COMMON)
+		*netbuf.o (.bss* COMMON)
+		*snmp_scalar.o (.bss* COMMON)
+		*icmp6.o (.bss* COMMON)
+		*ip.o (.bss* COMMON)
+		*tcpip.o (.bss* COMMON)
+		/*others*/
+		*lib_vikmemcpy.o (.bss* COMMON)
+		*dq_rem.o (.bss* COMMON)
+		*dq_addlast.o (.bss* COMMON)
+		/*Boot related*/
+		*rtl8721dhp_app_start.o (.bss* COMMON)
+		*rtl8721dhp_system.o (.bss* COMMON)
+		*rtl8721dhp_intfcfg.o (.bss* COMMON)
+		*mm_heap_regioninfo.o (.bss* COMMON)
+		/*Performance related*/
+		*lib_wlan.a: (.bss* COMMON)
+		*rtk_netmgr.o (.bss* COMMON)
+		*wifi_conf.o (.bss* COMMON)
+		*wifi_manager_lwnl_listener.o (.bss* COMMON)
+		*wifi_manager_state.o (.bss* COMMON)
+		*iperf_units.o (.bss* COMMON)
+		*rtl8721d_wificfg.o (.bss* COMMON)
+		*rtl8721dhp_psram.o (.bss* COMMON)
+		*amebad_serial.o (.bss* COMMON)
+		*wd_initialize.o (.bss* COMMON)
+		*up_assert.o (.bss* COMMON)
+		*amebad_enet.o (.bss* COMMON)
+		*iperf_*.o (.bss* COMMON)
+		*serial_api.o (.bss* COMMON)
+		*mq_initialize.o (.bss* COMMON)
+		*irq_initialize.o (.bss* COMMON)
+		*sig_initialize.o (.bss* COMMON)
+		*clock_initialize.o (.bss* COMMON)
+		*kmm_initialize.o (.bss* COMMON)
+		*kwork_hpthread.o (.bss* COMMON)
+		*kwork_lpthread.o (.bss* COMMON)
+		*rtl8721d_uart.o (.bss* COMMON)
+		__bss_end__ = .;
+
 	} > BD_RAM_NS
 
 	.ram_image2.nocache.data :
@@ -140,20 +620,9 @@ SECTIONS
 
 	.ram_heap.data :
 	{
+		. = ALIGN (32);
 		*(.bfsram.data*)
 		end = .;
-		*(.heap.stdlib*)
-		. = . + 4096;
-
-	} > BD_RAM_NS
-
-	.ram_image2.bss :
-	{
-		_sbss = ABSOLUTE(.);
-		__bss_start__ = .;
-		*(.bss*)
-		*(COMMON)
-		__bss_end__ = .;
 		_ebss = ABSOLUTE(.);
 	} > BD_RAM_NS
 
@@ -161,6 +630,7 @@ SECTIONS
 	.xip_image2.text :
 	{
 		__flash_text_start__ = .;
+		_stext_flash = ABSOLUTE(.);
 
 		*(.img2_custom_signature*)
 
@@ -190,6 +660,7 @@ SECTIONS
 		KEEP(*(.cmd.table.data*))
 		__cmd_table_end__ = .;
 
+		_etext_flash = ABSOLUTE(.);
 		__flash_text_end__ = .;
 
 		. = ALIGN (16);
@@ -227,19 +698,26 @@ SECTIONS
 
 	.psram_image2.data :
 	{
+		. = ALIGN (32);
 		*(.psram.data*)
+		*(.data*)
+		. = ALIGN (32);
 		*(.psram.rodata*)
 	} > PSRAM_NS
 
 	.psram_image2.bss :
 	{
+		. = ALIGN (32);
 		__psram_bss_start__ = .;
 		*(.psram.bss*)
+		*(.bss*)
+		*(COMMON)
 		__psram_bss_end__ = .;
 	} > PSRAM_NS
 
 	.psram_heap.data :
 	{
+		. = ALIGN (32);
 		*(.psram.heap*)
 	} > PSRAM_NS
 	__StackLimit = ABSOLUTE(ORIGIN(BD_RAM_NS) + LENGTH(BD_RAM_NS));
@@ -594,314 +1072,314 @@ SECTIONS
     rom_sha512_hmac = 0x1011ce65;
     rom_sha512_hkdf = 0x1011cea1;
     curve25519_donna = 0x1011dce5;
-    //mbedtls_aes_init = 0x1011e569;
-    //mbedtls_aes_free = 0x1011e579;
-    //mbedtls_aes_setkey_enc = 0x1011e58d;
-    //mbedtls_aes_setkey_dec = 0x1011e7a5;
-    //mbedtls_aes_encrypt = 0x1011e8c1;
-    //mbedtls_aes_decrypt = 0x1011ecf9;
-    //mbedtls_aes_crypt_ecb = 0x1011f145;
-    //mbedtls_aes_crypt_cbc = 0x1011f1c9;
-    //mbedtls_aes_crypt_cfb128 = 0x1011f3d5;
-    //mbedtls_aes_crypt_cfb8 = 0x1011f44b;
-    //mbedtls_aes_crypt_ctr = 0x1011f4b1;
-    //mbedtls_arc4_init = 0x1011f515;
-    //mbedtls_arc4_free = 0x1011f525;
-    //mbedtls_arc4_setup = 0x1011f539;
-    //mbedtls_arc4_crypt = 0x1011f57f;
-    //mbedtls_asn1_get_len = 0x1011f5c5;
-    //mbedtls_asn1_get_tag = 0x1011f661;
-    //mbedtls_asn1_get_bool = 0x1011f689;
-    //mbedtls_asn1_get_int = 0x1011f6b9;
-    //mbedtls_asn1_get_mpi = 0x1011f6ff;
-    //mbedtls_asn1_get_bitstring = 0x1011f725;
-    //mbedtls_asn1_get_bitstring_null = 0x1011f76d;
-    //mbedtls_asn1_get_sequence_of = 0x1011f795;
-    //mbedtls_asn1_get_alg = 0x1011f81d;
-    //mbedtls_asn1_get_alg_null = 0x1011f8a9;
-    //mbedtls_asn1_free_named_data = 0x1011f8ed;
-    //mbedtls_asn1_free_named_data_list = 0x1011f91d;
-    //mbedtls_asn1_find_named_data = 0x1011f941;
-    //mbedtls_asn1_write_len = 0x1011f96d;
-    //mbedtls_asn1_write_tag = 0x1011fa55;
-    //mbedtls_asn1_write_raw_buffer = 0x1011fa71;
-    //mbedtls_asn1_write_mpi = 0x1011faa1;
-    //mbedtls_asn1_write_null = 0x1011fb13;
-    //mbedtls_asn1_write_oid = 0x1011fb39;
-    //mbedtls_asn1_write_algorithm_identifier = 0x1011fb6d;
-    //mbedtls_asn1_write_bool = 0x1011fbbd;
-    //mbedtls_asn1_write_int = 0x1011fbff;
-    //mbedtls_asn1_write_printable_string = 0x1011fc61;
-    //mbedtls_asn1_write_ia5_string = 0x1011fc95;
-    //mbedtls_asn1_write_bitstring = 0x1011fcc9;
-    //mbedtls_asn1_write_octet_string = 0x1011fd3d;
-    //mbedtls_asn1_store_named_data = 0x1011fd71;
-    //mbedtls_base64_encode = 0x1011fe29;
-    //mbedtls_base64_decode = 0x1011ff2d;
-    //mbedtls_mpi_init = 0x10120b19;
-    //mbedtls_mpi_free = 0x10120b27;
-    //mbedtls_mpi_grow = 0x10120b5d;
-    //mbedtls_mpi_shrink = 0x10120bc1;
-    //mbedtls_mpi_copy = 0x10120c41;
-    //mbedtls_mpi_swap = 0x10120c9d;
-    //mbedtls_mpi_safe_cond_assign = 0x10120cc5;
-    //mbedtls_mpi_safe_cond_swap = 0x10120d31;
-    //mbedtls_mpi_lset = 0x10120db3;
-    //mbedtls_mpi_get_bit = 0x10120df1;
-    //mbedtls_mpi_set_bit = 0x10120e11;
-    //mbedtls_mpi_lsb = 0x10120e61;
-    //mbedtls_mpi_bitlen = 0x10120e93;
-    //mbedtls_mpi_size = 0x10120ed3;
-    //mbedtls_mpi_read_binary = 0x10120edf;
-    //mbedtls_mpi_write_binary = 0x10120f47;
-    //mbedtls_mpi_shift_l = 0x10120f91;
-    //mbedtls_mpi_shift_r = 0x1012102d;
-    //mbedtls_mpi_cmp_abs = 0x101210ab;
-    //mbedtls_mpi_cmp_mpi = 0x101211ed;
-    //mbedtls_mpi_cmp_int = 0x10121277;
-    //mbedtls_mpi_add_abs = 0x101212a3;
-    //mbedtls_mpi_sub_abs = 0x10121357;
-    //mbedtls_mpi_add_mpi = 0x101213d5;
-    //mbedtls_mpi_sub_mpi = 0x10121417;
-    //mbedtls_mpi_add_int = 0x1012145b;
-    //mbedtls_mpi_sub_int = 0x10121487;
-    //mbedtls_mpi_mul_mpi = 0x101214b3;
-    //mbedtls_mpi_mul_int = 0x1012158f;
-    //mbedtls_mpi_read_string = 0x101215a9;
-    //mbedtls_mpi_div_mpi = 0x101216c9;
-    //mbedtls_mpi_div_int = 0x10121aeb;
-    //mbedtls_mpi_mod_mpi = 0x10121b15;
-    //mbedtls_mpi_mod_int = 0x10121b75;
-    //mbedtls_mpi_write_string = 0x10121c15;
-    //mbedtls_mpi_exp_mod = 0x10121d6d;
-    //mbedtls_mpi_gcd = 0x101221a5;
-    //mbedtls_mpi_fill_random = 0x101222af;
-    //mbedtls_mpi_inv_mod = 0x101224f9;
-    //mbedtls_mpi_is_prime = 0x101227b5;
-    //mbedtls_mpi_gen_prime = 0x10122809;
-    //mbedtls_ctr_drbg_init = 0x10122ae9;
-    //mbedtls_ctr_drbg_free = 0x10122af9;
-    //mbedtls_ctr_drbg_set_prediction_resistance = 0x10122b17;
-    //mbedtls_ctr_drbg_set_entropy_len = 0x10122b1b;
-    //mbedtls_ctr_drbg_set_reseed_interval = 0x10122b1f;
-    //mbedtls_ctr_drbg_update = 0x10122b23;
-    //mbedtls_ctr_drbg_reseed = 0x10122b47;
-    //mbedtls_ctr_drbg_seed_entropy_len = 0x10122bc5;
-    //mbedtls_ctr_drbg_seed = 0x10122c19;
-    //mbedtls_ctr_drbg_random_with_add = 0x10122c2b;
-    //mbedtls_ctr_drbg_random = 0x10122cf1;
-    //mbedtls_des_init = 0x10122d11;
-    //mbedtls_des_free = 0x10122d1d;
-    //mbedtls_des3_init = 0x10122d25;
-    //mbedtls_des3_free = 0x10122d35;
-    //mbedtls_des_key_set_parity = 0x10122d3f;
-    //mbedtls_des_key_check_key_parity = 0x10122d59;
-    //mbedtls_des_key_check_weak = 0x10122d7d;
-    //mbedtls_des_setkey = 0x10122da9;
-    //mbedtls_des_setkey_enc = 0x101231bb;
-    //mbedtls_des_setkey_dec = 0x101231e5;
-    //mbedtls_des3_set2key_enc = 0x10123239;
-    //mbedtls_des3_set2key_dec = 0x1012327d;
-    //mbedtls_des3_set3key_enc = 0x101232c1;
-    //mbedtls_des3_set3key_dec = 0x101232fd;
-    //mbedtls_des_crypt_ecb = 0x10123339;
-    //mbedtls_des_crypt_cbc = 0x10123541;
-    //mbedtls_des3_crypt_ecb = 0x10123731;
-    //mbedtls_des3_crypt_cbc = 0x10123b81;
-    //mbedtls_dhm_init = 0x10123e01;
-    //mbedtls_dhm_read_params = 0x10123e0d;
-    //mbedtls_dhm_make_params = 0x10123e59;
-    //mbedtls_dhm_read_public = 0x10123f91;
-    //mbedtls_dhm_make_public = 0x10123fb5;
-    //mbedtls_dhm_calc_secret = 0x1012406d;
-    //mbedtls_dhm_free = 0x1012426d;
-    //mbedtls_dhm_parse_dhm = 0x101242cf;
-    //mbedtls_ecdh_gen_public = 0x101243c1;
-    //mbedtls_ecdh_compute_shared = 0x101243c5;
-    //mbedtls_ecdh_init = 0x10124425;
-    //mbedtls_ecdh_free = 0x10124435;
-    //mbedtls_ecdh_make_params = 0x1012447d;
-    //mbedtls_ecdh_read_params = 0x101244ed;
-    //mbedtls_ecdh_get_params = 0x10124515;
-    //mbedtls_ecdh_make_public = 0x10124561;
-    //mbedtls_ecdh_read_public = 0x101245b1;
-    //mbedtls_ecdh_calc_secret = 0x101245dd;
-    //mbedtls_ecdsa_sign = 0x10124693;
-    //mbedtls_ecdsa_sign_det = 0x10124815;
-    //mbedtls_ecdsa_verify = 0x101248bd;
-    //mbedtls_ecdsa_write_signature = 0x101249f9;
-    //mbedtls_ecdsa_write_signature_det = 0x10124a9d;
-    //mbedtls_ecdsa_read_signature = 0x10124abb;
-    //mbedtls_ecdsa_genkey = 0x10124b55;
-    //mbedtls_ecdsa_from_keypair = 0x10124b83;
-    //mbedtls_ecdsa_init = 0x10124bbb;
-    //mbedtls_ecdsa_free = 0x10124bbf;
-    //mbedtls_ecjpake_init = 0x10124ff5;
-    //mbedtls_ecjpake_free = 0x1012504f;
-    //mbedtls_ecjpake_setup = 0x101250a5;
-    //mbedtls_ecjpake_check = 0x101250e9;
-    //mbedtls_ecjpake_read_round_one = 0x10125109;
-    //mbedtls_ecjpake_write_round_one = 0x10125185;
-    //mbedtls_ecjpake_read_round_two = 0x101252ad;
-    //mbedtls_ecjpake_write_round_two = 0x10125365;
-    //mbedtls_ecjpake_derive_secret = 0x101254a1;
-    //mbedtls_ecp_curve_list = 0x10125de9;
-    //mbedtls_ecp_curve_info_from_grp_id = 0x10125df1;
-    //mbedtls_ecp_curve_info_from_tls_id = 0x10125e0d;
-    //mbedtls_ecp_curve_info_from_name = 0x10125e29;
-    //mbedtls_ecp_point_init = 0x10125e51;
-    //mbedtls_ecp_group_init = 0x10125e71;
-    //mbedtls_ecp_keypair_init = 0x10125e81;
-    //mbedtls_ecp_point_free = 0x10125ea1;
-    //mbedtls_ecp_group_free = 0x10125ec1;
-    //mbedtls_ecp_keypair_free = 0x10125f31;
-    //mbedtls_ecp_copy = 0x10125f51;
-    //mbedtls_ecp_group_copy = 0x10125f7d;
-    //mbedtls_ecp_set_zero = 0x10125f83;
-    //mbedtls_ecp_is_zero = 0x10126839;
-    //mbedtls_ecp_point_cmp = 0x1012684b;
-    //mbedtls_ecp_point_read_string = 0x1012687d;
-    //mbedtls_ecp_point_write_binary = 0x101268a9;
-    //mbedtls_ecp_point_read_binary = 0x1012694d;
-    //mbedtls_ecp_tls_read_point = 0x101269b9;
-    //mbedtls_ecp_tls_write_point = 0x101269e9;
-    //mbedtls_ecp_tls_read_group = 0x10126a19;
-    //mbedtls_ecp_tls_write_group = 0x10126a61;
-    //mbedtls_ecp_check_pubkey = 0x10126a99;
-    //mbedtls_ecp_check_privkey = 0x10126c2d;
-    //mbedtls_ecp_mul = 0x10126c9d;
-    //mbedtls_ecp_muladd = 0x1012726f;
-    //mbedtls_ecp_gen_keypair_base = 0x101272d9;
-    //mbedtls_ecp_gen_keypair = 0x101273d9;
-    //mbedtls_ecp_gen_key = 0x101273f1;
-    //mbedtls_ecp_check_pub_priv = 0x10127419;
-    //mbedtls_ecp_group_load = 0x10128519;
-    //mbedtls_hmac_drbg_init = 0x1012893d;
-    //mbedtls_hmac_drbg_update = 0x10128949;
-    //mbedtls_hmac_drbg_seed_buf = 0x101289e5;
-    //mbedtls_hmac_drbg_reseed = 0x10128a35;
-    //mbedtls_hmac_drbg_seed = 0x10128aad;
-    //mbedtls_hmac_drbg_set_prediction_resistance = 0x10128b1d;
-    //mbedtls_hmac_drbg_set_entropy_len = 0x10128b21;
-    //mbedtls_hmac_drbg_set_reseed_interval = 0x10128b25;
-    //mbedtls_hmac_drbg_random_with_add = 0x10128b29;
-    //mbedtls_hmac_drbg_random = 0x10128bdd;
-    //mbedtls_hmac_drbg_free = 0x10128bed;
-    //mbedtls_md_list = 0x10128c09;
-    //mbedtls_md_info_from_string = 0x10128c11;
-    //mbedtls_md_info_from_type = 0x10128ca9;
-    //mbedtls_md_init = 0x10128ced;
-    //mbedtls_md_free = 0x10128cf9;
-    //mbedtls_md_clone = 0x10128d45;
-    //mbedtls_md_setup = 0x10128d6d;
-    //mbedtls_md_init_ctx = 0x10128db5;
-    //mbedtls_md_starts = 0x10128dbb;
-    //mbedtls_md_update = 0x10128dd5;
-    //mbedtls_md_finish = 0x10128df1;
-    //mbedtls_md = 0x10128e0d;
-    //mbedtls_md_hmac_starts = 0x10128e29;
-    //mbedtls_md_hmac_update = 0x10128eed;
-    //mbedtls_md_hmac_finish = 0x10128f0d;
-    //mbedtls_md_hmac_reset = 0x10128f65;
-    //mbedtls_md_hmac = 0x10128f91;
-    //mbedtls_md_process = 0x10128fe5;
-    //mbedtls_md_get_size = 0x10129001;
-    //mbedtls_md_get_type = 0x10129009;
-    //mbedtls_md_get_name = 0x1012900f;
-    //mbedtls_md5_init = 0x1012917d;
-    //mbedtls_md5_free = 0x10129189;
-    //mbedtls_md5_clone = 0x1012919d;
-    //mbedtls_md5_starts = 0x101291a9;
-    //mbedtls_md5_process = 0x101291d5;
-    //mbedtls_md5_update = 0x101298dd;
-    //mbedtls_md5_finish = 0x101298e3;
-    //mbedtls_md5 = 0x10129995;
-    //mbedtls_oid_get_attr_short_name = 0x101299fd;
-    //mbedtls_oid_get_x509_ext_type = 0x10129a35;
-    //mbedtls_oid_get_extended_key_usage = 0x10129a6d;
-    //mbedtls_oid_get_sig_alg_desc = 0x10129aa5;
-    //mbedtls_oid_get_sig_alg = 0x10129abd;
-    //mbedtls_oid_get_oid_by_sig_alg = 0x10129adb;
-    //mbedtls_oid_get_pk_alg = 0x10129b09;
-    //mbedtls_oid_get_oid_by_pk_alg = 0x10129b41;
-    //mbedtls_oid_get_ec_grp = 0x10129b69;
-    //mbedtls_oid_get_oid_by_ec_grp = 0x10129ba1;
-    //mbedtls_oid_get_cipher_alg = 0x10129bc9;
-    //mbedtls_oid_get_md_alg = 0x10129c01;
-    //mbedtls_oid_get_oid_by_md = 0x10129c39;
-    //mbedtls_oid_get_pkcs12_pbe_alg = 0x10129c61;
-    //mbedtls_pem_init = 0x10129e5f;
-    //mbedtls_pem_read_buffer = 0x10129e6d;
-    //mbedtls_pem_free = 0x1012a161;
-    //mbedtls_pem_write_buffer = 0x1012a185;
-    //mbedtls_pk_init = 0x1012a279;
-    //mbedtls_pk_free = 0x1012a283;
-    //mbedtls_pk_info_from_type = 0x1012a2a5;
-    //mbedtls_pk_setup = 0x1012a2d9;
-    //mbedtls_pk_setup_rsa_alt = 0x1012a305;
-    //mbedtls_pk_can_do = 0x1012a351;
-    //mbedtls_pk_verify = 0x1012a361;
-    //mbedtls_pk_sign = 0x1012a3bd;
-    //mbedtls_pk_decrypt = 0x1012a425;
-    //mbedtls_pk_encrypt = 0x1012a451;
-    //mbedtls_pk_check_pair = 0x1012a47d;
-    //mbedtls_pk_get_bitlen = 0x1012a4bd;
-    //mbedtls_pk_verify_ext = 0x1012a4cd;
-    //mbedtls_pk_debug = 0x1012a585;
-    //mbedtls_pk_get_name = 0x1012a5a9;
-    //mbedtls_pk_get_type = 0x1012a5bd;
-    //mbedtls_pk_write_pubkey = 0x1012aa23;
-    //mbedtls_pk_write_pubkey_der = 0x1012aaad;
-    //mbedtls_pk_write_key_der = 0x1012ab7d;
-    //mbedtls_pk_write_pubkey_pem = 0x1012ad79;
-    //mbedtls_pk_write_key_pem = 0x1012adc1;
-    //mbedtls_rsa_init = 0x1012aecd;
-    //mbedtls_rsa_set_padding = 0x1012aeed;
-    //mbedtls_rsa_check_pubkey = 0x1012aef7;
-    //mbedtls_rsa_check_privkey = 0x1012af4d;
-    //mbedtls_rsa_check_pub_priv = 0x1012b169;
-    //mbedtls_rsa_public = 0x1012b1a1;
-    //mbedtls_rsa_private = 0x1012b20f;
-    //mbedtls_rsa_rsaes_oaep_encrypt = 0x1012b465;
-    //mbedtls_rsa_rsaes_pkcs1_v15_encrypt = 0x1012b58d;
-    //mbedtls_rsa_pkcs1_encrypt = 0x1012b675;
-    //mbedtls_rsa_rsaes_oaep_decrypt = 0x1012b6b5;
-    //mbedtls_rsa_rsaes_pkcs1_v15_decrypt = 0x1012b821;
-    //mbedtls_rsa_pkcs1_decrypt = 0x1012b92d;
-    //mbedtls_rsa_rsassa_pss_sign = 0x1012b975;
-    //mbedtls_rsa_rsassa_pkcs1_v15_sign = 0x1012badd;
-    //mbedtls_rsa_pkcs1_sign = 0x1012bc85;
-    //mbedtls_rsa_rsassa_pss_verify_ext = 0x1012bcc9;
-    //mbedtls_rsa_rsassa_pss_verify = 0x1012be75;
-    //mbedtls_rsa_rsassa_pkcs1_v15_verify = 0x1012bea7;
-    //mbedtls_rsa_pkcs1_verify = 0x1012c009;
-    //mbedtls_rsa_free = 0x1012c04d;
-    //mbedtls_rsa_gen_key = 0x1012c0bb;
-    //mbedtls_rsa_copy = 0x1012c261;
-    //mbedtls_sha1_init = 0x1012c365;
-    //mbedtls_sha1_free = 0x1012c371;
-    //mbedtls_sha1_clone = 0x1012c385;
-    //mbedtls_sha1_starts = 0x1012c391;
-    //mbedtls_sha1_process = 0x1012c3c5;
-    //mbedtls_sha1_update = 0x1012d391;
-    //mbedtls_sha1_finish = 0x1012d397;
-    //mbedtls_sha1 = 0x1012d45d;
-    //mbedtls_sha256_init = 0x1012d491;
-    //mbedtls_sha256_free = 0x1012d49d;
-    //mbedtls_sha256_clone = 0x1012d4b1;
-    //mbedtls_sha256_starts = 0x1012d4bd;
-    //mbedtls_sha256_process = 0x1012d55d;
-    //mbedtls_sha256_update = 0x1012dc89;
-    //mbedtls_sha256_finish = 0x1012dc8f;
-    //mbedtls_sha256 = 0x1012dd91;
-    //mbedtls_sha512_init = 0x1012ddc9;
-    //mbedtls_sha512_free = 0x1012ddd5;
-    //mbedtls_sha512_clone = 0x1012dde9;
-    //mbedtls_sha512_starts = 0x1012ddf5;
-    //mbedtls_sha512_process = 0x1012df29;
-    //mbedtls_sha512_update = 0x1012ec7d;
-    //mbedtls_sha512_finish = 0x1012ec83;
-    //mbedtls_sha512 = 0x1012eeb9;
+    rtl_aes_init = 0x1011e569;
+    rtl_aes_free = 0x1011e579;
+    rtl_aes_setkey_enc = 0x1011e58d;
+    rtl_aes_setkey_dec = 0x1011e7a5;
+    rtl_aes_encrypt = 0x1011e8c1;
+    rtl_aes_decrypt = 0x1011ecf9;
+    rtl_aes_crypt_ecb = 0x1011f145;
+    rtl_aes_crypt_cbc = 0x1011f1c9;
+    rtl_aes_crypt_cfb128 = 0x1011f3d5;
+    rtl_aes_crypt_cfb8 = 0x1011f44b;
+    rtl_aes_crypt_ctr = 0x1011f4b1;
+    rtl_arc4_init = 0x1011f515;
+    rtl_arc4_free = 0x1011f525;
+    rtl_arc4_setup = 0x1011f539;
+    rtl_arc4_crypt = 0x1011f57f;
+    rtl_asn1_get_len = 0x1011f5c5;
+    rtl_asn1_get_tag = 0x1011f661;
+    rtl_asn1_get_bool = 0x1011f689;
+    rtl_asn1_get_int = 0x1011f6b9;
+    rtl_asn1_get_mpi = 0x1011f6ff;
+    rtl_asn1_get_bitstring = 0x1011f725;
+    rtl_asn1_get_bitstring_null = 0x1011f76d;
+    rtl_asn1_get_sequence_of = 0x1011f795;
+    rtl_asn1_get_alg = 0x1011f81d;
+    rtl_asn1_get_alg_null = 0x1011f8a9;
+    rtl_asn1_free_named_data = 0x1011f8ed;
+    rtl_asn1_free_named_data_list = 0x1011f91d;
+    rtl_asn1_find_named_data = 0x1011f941;
+    rtl_asn1_write_len = 0x1011f96d;
+    rtl_asn1_write_tag = 0x1011fa55;
+    rtl_asn1_write_raw_buffer = 0x1011fa71;
+    rtl_asn1_write_mpi = 0x1011faa1;
+    rtl_asn1_write_null = 0x1011fb13;
+    rtl_asn1_write_oid = 0x1011fb39;
+    rtl_asn1_write_algorithm_identifier = 0x1011fb6d;
+    rtl_asn1_write_bool = 0x1011fbbd;
+    rtl_asn1_write_int = 0x1011fbff;
+    rtl_asn1_write_printable_string = 0x1011fc61;
+    rtl_asn1_write_ia5_string = 0x1011fc95;
+    rtl_asn1_write_bitstring = 0x1011fcc9;
+    rtl_asn1_write_octet_string = 0x1011fd3d;
+    rtl_asn1_store_named_data = 0x1011fd71;
+    rtl_base64_encode = 0x1011fe29;
+    rtl_base64_decode = 0x1011ff2d;
+    rtl_mpi_init = 0x10120b19;
+    rtl_mpi_free = 0x10120b27;
+    rtl_mpi_grow = 0x10120b5d;
+    rtl_mpi_shrink = 0x10120bc1;
+    rtl_mpi_copy = 0x10120c41;
+    rtl_mpi_swap = 0x10120c9d;
+    rtl_mpi_safe_cond_assign = 0x10120cc5;
+    rtl_mpi_safe_cond_swap = 0x10120d31;
+    rtl_mpi_lset = 0x10120db3;
+    rtl_mpi_get_bit = 0x10120df1;
+    rtl_mpi_set_bit = 0x10120e11;
+    rtl_mpi_lsb = 0x10120e61;
+    rtl_mpi_bitlen = 0x10120e93;
+    rtl_mpi_size = 0x10120ed3;
+    rtl_mpi_read_binary = 0x10120edf;
+    rtl_mpi_write_binary = 0x10120f47;
+    rtl_mpi_shift_l = 0x10120f91;
+    rtl_mpi_shift_r = 0x1012102d;
+    rtl_mpi_cmp_abs = 0x101210ab;
+    rtl_mpi_cmp_mpi = 0x101211ed;
+    rtl_mpi_cmp_int = 0x10121277;
+    rtl_mpi_add_abs = 0x101212a3;
+    rtl_mpi_sub_abs = 0x10121357;
+    rtl_mpi_add_mpi = 0x101213d5;
+    rtl_mpi_sub_mpi = 0x10121417;
+    rtl_mpi_add_int = 0x1012145b;
+    rtl_mpi_sub_int = 0x10121487;
+    rtl_mpi_mul_mpi = 0x101214b3;
+    rtl_mpi_mul_int = 0x1012158f;
+    rtl_mpi_read_string = 0x101215a9;
+    rtl_mpi_div_mpi = 0x101216c9;
+    rtl_mpi_div_int = 0x10121aeb;
+    rtl_mpi_mod_mpi = 0x10121b15;
+    rtl_mpi_mod_int = 0x10121b75;
+    rtl_mpi_write_string = 0x10121c15;
+    rtl_mpi_exp_mod = 0x10121d6d;
+    rtl_mpi_gcd = 0x101221a5;
+    rtl_mpi_fill_random = 0x101222af;
+    rtl_mpi_inv_mod = 0x101224f9;
+    rtl_mpi_is_prime = 0x101227b5;
+    rtl_mpi_gen_prime = 0x10122809;
+    rtl_ctr_drbg_init = 0x10122ae9;
+    rtl_ctr_drbg_free = 0x10122af9;
+    rtl_ctr_drbg_set_prediction_resistance = 0x10122b17;
+    rtl_ctr_drbg_set_entropy_len = 0x10122b1b;
+    rtl_ctr_drbg_set_reseed_interval = 0x10122b1f;
+    rtl_ctr_drbg_update = 0x10122b23;
+    rtl_ctr_drbg_reseed = 0x10122b47;
+    rtl_ctr_drbg_seed_entropy_len = 0x10122bc5;
+    rtl_ctr_drbg_seed = 0x10122c19;
+    rtl_ctr_drbg_random_with_add = 0x10122c2b;
+    rtl_ctr_drbg_random = 0x10122cf1;
+    rtl_des_init = 0x10122d11;
+    rtl_des_free = 0x10122d1d;
+    rtl_des3_init = 0x10122d25;
+    rtl_des3_free = 0x10122d35;
+    rtl_des_key_set_parity = 0x10122d3f;
+    rtl_des_key_check_key_parity = 0x10122d59;
+    rtl_des_key_check_weak = 0x10122d7d;
+    rtl_des_setkey = 0x10122da9;
+    rtl_des_setkey_enc = 0x101231bb;
+    rtl_des_setkey_dec = 0x101231e5;
+    rtl_des3_set2key_enc = 0x10123239;
+    rtl_des3_set2key_dec = 0x1012327d;
+    rtl_des3_set3key_enc = 0x101232c1;
+    rtl_des3_set3key_dec = 0x101232fd;
+    rtl_des_crypt_ecb = 0x10123339;
+    rtl_des_crypt_cbc = 0x10123541;
+    rtl_des3_crypt_ecb = 0x10123731;
+    rtl_des3_crypt_cbc = 0x10123b81;
+    rtl_dhm_init = 0x10123e01;
+    rtl_dhm_read_params = 0x10123e0d;
+    rtl_dhm_make_params = 0x10123e59;
+    rtl_dhm_read_public = 0x10123f91;
+    rtl_dhm_make_public = 0x10123fb5;
+    rtl_dhm_calc_secret = 0x1012406d;
+    rtl_dhm_free = 0x1012426d;
+    rtl_dhm_parse_dhm = 0x101242cf;
+    rtl_ecdh_gen_public = 0x101243c1;
+    rtl_ecdh_compute_shared = 0x101243c5;
+    rtl_ecdh_init = 0x10124425;
+    rtl_ecdh_free = 0x10124435;
+    rtl_ecdh_make_params = 0x1012447d;
+    rtl_ecdh_read_params = 0x101244ed;
+    rtl_ecdh_get_params = 0x10124515;
+    rtl_ecdh_make_public = 0x10124561;
+    rtl_ecdh_read_public = 0x101245b1;
+    rtl_ecdh_calc_secret = 0x101245dd;
+    rtl_ecdsa_sign = 0x10124693;
+    rtl_ecdsa_sign_det = 0x10124815;
+    rtl_ecdsa_verify = 0x101248bd;
+    rtl_ecdsa_write_signature = 0x101249f9;
+    rtl_ecdsa_write_signature_det = 0x10124a9d;
+    rtl_ecdsa_read_signature = 0x10124abb;
+    rtl_ecdsa_genkey = 0x10124b55;
+    rtl_ecdsa_from_keypair = 0x10124b83;
+    rtl_ecdsa_init = 0x10124bbb;
+    rtl_ecdsa_free = 0x10124bbf;
+    rtl_ecjpake_init = 0x10124ff5;
+    rtl_ecjpake_free = 0x1012504f;
+    rtl_ecjpake_setup = 0x101250a5;
+    rtl_ecjpake_check = 0x101250e9;
+    rtl_ecjpake_read_round_one = 0x10125109;
+    rtl_ecjpake_write_round_one = 0x10125185;
+    rtl_ecjpake_read_round_two = 0x101252ad;
+    rtl_ecjpake_write_round_two = 0x10125365;
+    rtl_ecjpake_derive_secret = 0x101254a1;
+    rtl_ecp_curve_list = 0x10125de9;
+    rtl_ecp_curve_info_from_grp_id = 0x10125df1;
+    rtl_ecp_curve_info_from_tls_id = 0x10125e0d;
+    rtl_ecp_curve_info_from_name = 0x10125e29;
+    rtl_ecp_point_init = 0x10125e51;
+    rtl_ecp_group_init = 0x10125e71;
+    rtl_ecp_keypair_init = 0x10125e81;
+    rtl_ecp_point_free = 0x10125ea1;
+    rtl_ecp_group_free = 0x10125ec1;
+    rtl_ecp_keypair_free = 0x10125f31;
+    rtl_ecp_copy = 0x10125f51;
+    rtl_ecp_group_copy = 0x10125f7d;
+    rtl_ecp_set_zero = 0x10125f83;
+    rtl_ecp_is_zero = 0x10126839;
+    rtl_ecp_point_cmp = 0x1012684b;
+    rtl_ecp_point_read_string = 0x1012687d;
+    rtl_ecp_point_write_binary = 0x101268a9;
+    rtl_ecp_point_read_binary = 0x1012694d;
+    rtl_ecp_tls_read_point = 0x101269b9;
+    rtl_ecp_tls_write_point = 0x101269e9;
+    rtl_ecp_tls_read_group = 0x10126a19;
+    rtl_ecp_tls_write_group = 0x10126a61;
+    rtl_ecp_check_pubkey = 0x10126a99;
+    rtl_ecp_check_privkey = 0x10126c2d;
+    rtl_ecp_mul = 0x10126c9d;
+    rtl_ecp_muladd = 0x1012726f;
+    rtl_ecp_gen_keypair_base = 0x101272d9;
+    rtl_ecp_gen_keypair = 0x101273d9;
+    rtl_ecp_gen_key = 0x101273f1;
+    rtl_ecp_check_pub_priv = 0x10127419;
+    rtl_ecp_group_load = 0x10128519;
+    rtl_hmac_drbg_init = 0x1012893d;
+    rtl_hmac_drbg_update = 0x10128949;
+    rtl_hmac_drbg_seed_buf = 0x101289e5;
+    rtl_hmac_drbg_reseed = 0x10128a35;
+    rtl_hmac_drbg_seed = 0x10128aad;
+    rtl_hmac_drbg_set_prediction_resistance = 0x10128b1d;
+    rtl_hmac_drbg_set_entropy_len = 0x10128b21;
+    rtl_hmac_drbg_set_reseed_interval = 0x10128b25;
+    rtl_hmac_drbg_random_with_add = 0x10128b29;
+    rtl_hmac_drbg_random = 0x10128bdd;
+    rtl_hmac_drbg_free = 0x10128bed;
+    rtl_md_list = 0x10128c09;
+    rtl_md_info_from_string = 0x10128c11;
+    rtl_md_info_from_type = 0x10128ca9;
+    rtl_md_init = 0x10128ced;
+    rtl_md_free = 0x10128cf9;
+    rtl_md_clone = 0x10128d45;
+    rtl_md_setup = 0x10128d6d;
+    rtl_md_init_ctx = 0x10128db5;
+    rtl_md_starts = 0x10128dbb;
+    rtl_md_update = 0x10128dd5;
+    rtl_md_finish = 0x10128df1;
+    rtl_md = 0x10128e0d;
+    rtl_md_hmac_starts = 0x10128e29;
+    rtl_md_hmac_update = 0x10128eed;
+    rtl_md_hmac_finish = 0x10128f0d;
+    rtl_md_hmac_reset = 0x10128f65;
+    rtl_md_hmac = 0x10128f91;
+    rtl_md_process = 0x10128fe5;
+    rtl_md_get_size = 0x10129001;
+    rtl_md_get_type = 0x10129009;
+    rtl_md_get_name = 0x1012900f;
+    rtl_md5_init = 0x1012917d;
+    rtl_md5_free = 0x10129189;
+    rtl_md5_clone = 0x1012919d;
+    rtl_md5_starts = 0x101291a9;
+    rtl_md5_process = 0x101291d5;
+    rtl_md5_update = 0x101298dd;
+    rtl_md5_finish = 0x101298e3;
+    rtl_md5 = 0x10129995;
+    rtl_oid_get_attr_short_name = 0x101299fd;
+    rtl_oid_get_x509_ext_type = 0x10129a35;
+    rtl_oid_get_extended_key_usage = 0x10129a6d;
+    rtl_oid_get_sig_alg_desc = 0x10129aa5;
+    rtl_oid_get_sig_alg = 0x10129abd;
+    rtl_oid_get_oid_by_sig_alg = 0x10129adb;
+    rtl_oid_get_pk_alg = 0x10129b09;
+    rtl_oid_get_oid_by_pk_alg = 0x10129b41;
+    rtl_oid_get_ec_grp = 0x10129b69;
+    rtl_oid_get_oid_by_ec_grp = 0x10129ba1;
+    rtl_oid_get_cipher_alg = 0x10129bc9;
+    rtl_oid_get_md_alg = 0x10129c01;
+    rtl_oid_get_oid_by_md = 0x10129c39;
+    rtl_oid_get_pkcs12_pbe_alg = 0x10129c61;
+    rtl_pem_init = 0x10129e5f;
+    rtl_pem_read_buffer = 0x10129e6d;
+    rtl_pem_free = 0x1012a161;
+    rtl_pem_write_buffer = 0x1012a185;
+    rtl_pk_init = 0x1012a279;
+    rtl_pk_free = 0x1012a283;
+    rtl_pk_info_from_type = 0x1012a2a5;
+    rtl_pk_setup = 0x1012a2d9;
+    rtl_pk_setup_rsa_alt = 0x1012a305;
+    rtl_pk_can_do = 0x1012a351;
+    rtl_pk_verify = 0x1012a361;
+    rtl_pk_sign = 0x1012a3bd;
+    rtl_pk_decrypt = 0x1012a425;
+    rtl_pk_encrypt = 0x1012a451;
+    rtl_pk_check_pair = 0x1012a47d;
+    rtl_pk_get_bitlen = 0x1012a4bd;
+    rtl_pk_verify_ext = 0x1012a4cd;
+    rtl_pk_debug = 0x1012a585;
+    rtl_pk_get_name = 0x1012a5a9;
+    rtl_pk_get_type = 0x1012a5bd;
+    rtl_pk_write_pubkey = 0x1012aa23;
+    rtl_pk_write_pubkey_der = 0x1012aaad;
+    rtl_pk_write_key_der = 0x1012ab7d;
+    rtl_pk_write_pubkey_pem = 0x1012ad79;
+    rtl_pk_write_key_pem = 0x1012adc1;
+    rtl_rsa_init = 0x1012aecd;
+    rtl_rsa_set_padding = 0x1012aeed;
+    rtl_rsa_check_pubkey = 0x1012aef7;
+    rtl_rsa_check_privkey = 0x1012af4d;
+    rtl_rsa_check_pub_priv = 0x1012b169;
+    rtl_rsa_public = 0x1012b1a1;
+    rtl_rsa_private = 0x1012b20f;
+    rtl_rsa_rsaes_oaep_encrypt = 0x1012b465;
+    rtl_rsa_rsaes_pkcs1_v15_encrypt = 0x1012b58d;
+    rtl_rsa_pkcs1_encrypt = 0x1012b675;
+    rtl_rsa_rsaes_oaep_decrypt = 0x1012b6b5;
+    rtl_rsa_rsaes_pkcs1_v15_decrypt = 0x1012b821;
+    rtl_rsa_pkcs1_decrypt = 0x1012b92d;
+    rtl_rsa_rsassa_pss_sign = 0x1012b975;
+    rtl_rsa_rsassa_pkcs1_v15_sign = 0x1012badd;
+    rtl_rsa_pkcs1_sign = 0x1012bc85;
+    rtl_rsa_rsassa_pss_verify_ext = 0x1012bcc9;
+    rtl_rsa_rsassa_pss_verify = 0x1012be75;
+    rtl_rsa_rsassa_pkcs1_v15_verify = 0x1012bea7;
+    rtl_rsa_pkcs1_verify = 0x1012c009;
+    rtl_rsa_free = 0x1012c04d;
+    rtl_rsa_gen_key = 0x1012c0bb;
+    rtl_rsa_copy = 0x1012c261;
+    rtl_sha1_init = 0x1012c365;
+    rtl_sha1_free = 0x1012c371;
+    rtl_sha1_clone = 0x1012c385;
+    rtl_sha1_starts = 0x1012c391;
+    rtl_sha1_process = 0x1012c3c5;
+    rtl_sha1_update = 0x1012d391;
+    rtl_sha1_finish = 0x1012d397;
+    rtl_sha1 = 0x1012d45d;
+    rtl_sha256_init = 0x1012d491;
+    rtl_sha256_free = 0x1012d49d;
+    rtl_sha256_clone = 0x1012d4b1;
+    rtl_sha256_starts = 0x1012d4bd;
+    rtl_sha256_process = 0x1012d55d;
+    rtl_sha256_update = 0x1012dc89;
+    rtl_sha256_finish = 0x1012dc8f;
+    rtl_sha256 = 0x1012dd91;
+    rtl_sha512_init = 0x1012ddc9;
+    rtl_sha512_free = 0x1012ddd5;
+    rtl_sha512_clone = 0x1012dde9;
+    rtl_sha512_starts = 0x1012ddf5;
+    rtl_sha512_process = 0x1012df29;
+    rtl_sha512_update = 0x1012ec7d;
+    rtl_sha512_finish = 0x1012ec83;
+    rtl_sha512 = 0x1012eeb9;
     __rom_entry_ns_start__ = 0x101c0000;
     rom_sec_call_ns_entry = 0x101c0000;
     __rom_entry_ns_end__ = 0x101c0008;
@@ -909,16 +1387,16 @@ SECTIONS
     PORT_AB = 0x101c0024;
     armBitRevIndexTable1024 = 0x101c004c;
     twiddleCoef_1024 = 0x101c0e5c;
-    //mbedtls_sha512_info = 0x101ce344;
-    //mbedtls_sha384_info = 0x101ce374;
-    //mbedtls_sha256_info = 0x101ce3a4;
-    //mbedtls_sha224_info = 0x101ce3d4;
-    //mbedtls_sha1_info = 0x101ce404;
-    //mbedtls_md5_info = 0x101ce434;
-    //mbedtls_rsa_alt_info = 0x101cea78;
-    //mbedtls_ecdsa_info = 0x101ceaa8;
-    //mbedtls_eckeydh_info = 0x101cead8;
-    //mbedtls_eckey_info = 0x101ceb08;
-    //mbedtls_rsa_info = 0x101ceb38;
+    rtl_sha512_info = 0x101ce344;
+    rtl_sha384_info = 0x101ce374;
+    rtl_sha256_info = 0x101ce3a4;
+    rtl_sha224_info = 0x101ce3d4;
+    rtl_sha1_info = 0x101ce404;
+    rtl_md5_info = 0x101ce434;
+    rtl_rsa_alt_info = 0x101cea78;
+    rtl_ecdsa_info = 0x101ceaa8;
+    rtl_eckeydh_info = 0x101cead8;
+    rtl_eckey_info = 0x101ceb08;
+    rtl_rsa_info = 0x101ceb38;
     __rom_bss_end_s__ = 0x200f9000;
 }

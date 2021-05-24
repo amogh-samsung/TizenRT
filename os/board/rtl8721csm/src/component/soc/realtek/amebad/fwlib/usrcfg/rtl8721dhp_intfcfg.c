@@ -22,9 +22,15 @@
 
 
 PSRAMCFG_TypeDef psram_dev_config = {
+#if defined(CONFIG_PLATFORM_TIZENRT_OS) || (CONFIG_TIZENRT_IMG3)
 	.psram_dev_enable = TRUE,			//enable psram
 	.psram_dev_cal_enable = TRUE,			//enable psram calibration function
 	.psram_dev_retention = TRUE,			//enable psram retention
+#else
+	.psram_dev_enable = FALSE,			//enable psram
+	.psram_dev_cal_enable = FALSE,			//enable psram calibration function
+	.psram_dev_retention = FALSE,			//enable psram retention
+#endif
 };
 
 SDIOHCFG_TypeDef sdioh_config = {
@@ -35,12 +41,12 @@ SDIOHCFG_TypeDef sdioh_config = {
 };
 
 #if defined(CONFIG_FTL_ENABLED)
-#define FTL_MEM_CUSTEM		0
+#define FTL_MEM_CUSTEM		1
 #if FTL_MEM_CUSTEM == 0
 #error "You should allocate flash sectors to for FTL physical map as following, then set FTL_MEM_CUSTEM to 1. For more information, Please refer to Application Note, FTL chapter. "
 #else
 const u8 ftl_phy_page_num = 3;									/* The number of physical map pages, default is 3*/
-const u32 ftl_phy_page_start_addr = 0x00102000;					/* The start offset of flash pages which is allocated to FTL physical map.
+const u32 ftl_phy_page_start_addr = 0x78000;					/* The start offset of flash pages which is allocated to FTL physical map.
 																	Users should modify it according to their own memory layout!! */
 #endif
 #endif

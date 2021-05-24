@@ -155,13 +155,16 @@ void up_add_kregion(void)
 {
 	int region_cnt;
 	struct mm_heap_s *kheap;
-	void *heap_start;
+	void *heap_start = NULL;
 	size_t heap_size;
 	void *stack_end = (void *)(g_idle_topstack & ~(0x7));
 	kheap = kmm_get_heap();
 	for (region_cnt = 1; region_cnt < CONFIG_KMM_REGIONS; region_cnt++) {
 		if (kheap[kregionx_heap_idx[region_cnt]].mm_heapsize == 0) {
-			mm_initialize(&kheap[kregionx_heap_idx[region_cnt]], kregionx_start[region_cnt], kregionx_size[region_cnt]);
+			lldbg("Heap idx = %u start = 0x%x size = %d\n", kregionx_heap_idx[region_cnt], kregionx_start[region_cnt], kregionx_size[region_cnt]);
+			if (mm_initialize(&kheap[kregionx_heap_idx[region_cnt]], kregionx_start[region_cnt], kregionx_size[region_cnt]) != OK) {
+				return;
+			}
 			continue;
 		}
 

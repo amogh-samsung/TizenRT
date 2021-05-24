@@ -86,6 +86,11 @@
 #include <arch/board/board.h>
 #include <tinyara/sched.h>
 
+#include <tinyara/mm/mm.h>
+
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+#include <arch/reboot_reason.h>
+#endif
 #include "sched/sched.h"
 #ifdef CONFIG_BOARD_ASSERT_AUTORESET
 #include <sys/boardctl.h>
@@ -104,14 +109,17 @@
 #include "up_internal.h"
 #include "mpu.h"
 
-#ifdef CONFIG_BINMGR_RECOVERY
 bool abort_mode = false;
-extern uint32_t g_assertpc;
+
+#ifdef CONFIG_BINMGR_RECOVERY
 extern struct tcb_s *g_faultmsg_sender;
 extern sq_queue_t g_faultmsg_list;
 extern sq_queue_t g_freemsg_list;
 #endif
 
+#ifdef CONFIG_APP_BINARY_SEPARATION
+extern uint32_t g_assertpc;
+#endif
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -132,23 +140,6 @@ extern sq_queue_t g_freemsg_list;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: up_getsp
- ****************************************************************************/
-
-/* I don't know if the builtin to get SP is enabled */
-
-static inline uint32_t up_getsp(void)
-{
-	uint32_t sp;
-	__asm__
-	(
-		"\tmov %0, sp\n\t"
-		: "=r"(sp)
-	);
-	return sp;
-}
 
 /****************************************************************************
  * Name: up_stackdump
@@ -403,6 +394,7 @@ static void up_dumpstate(void)
 
 	(void)usbtrace_enumerate(assert_tracecallback, NULL);
 #endif
+
 }
 #else
 #define up_dumpstate()
@@ -469,9 +461,11 @@ void up_assert(const uint8_t *filename, int lineno)
 {
 	board_led_on(LED_ASSERTION);
 
-#if defined(CONFIG_DEBUG_DISPLAY_SYMBOL) || defined(CONFIG_BINMGR_RECOVERY)
-	abort_mode = true;
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+	reboot_reason_write_user_intended();
 #endif
+
+	abort_mode = true;
 
 #if CONFIG_TASK_NAME_SIZE > 0
 	lldbg("Assertion failed at file:%s line: %d task: %s\n", filename, lineno, this_task()->name);
@@ -479,7 +473,7 @@ void up_assert(const uint8_t *filename, int lineno)
 	lldbg("Assertion failed at file:%s line: %d\n", filename, lineno);
 #endif
 
-#ifdef CONFIG_BINMGR_RECOVERY
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	uint32_t assert_pc;
 	bool is_kernel_fault;
 
@@ -495,9 +489,22 @@ void up_assert(const uint8_t *filename, int lineno)
 
 	is_kernel_fault = is_kernel_space((void *)assert_pc);
 
-#endif  /* CONFIG_BINMGR_RECOVERY */
+#endif  /* CONFIG_APP_BINARY_SEPARATION */
 
 	up_dumpstate();
+
+	lldbg("Checking kernel heap for corruption...\n");
+	if (mm_check_heap_corruption(g_kmmheap) == OK) {
+		lldbg("No heap corruption detected\n");
+	}
+#ifdef CONFIG_APP_BINARY_SEPARATION
+	if (!is_kernel_fault) {
+		lldbg("Checking current app heap for corruption...\n");
+		if (mm_check_heap_corruption((struct mm_heap_s *)(this_task()->uheap)) == OK) {
+			lldbg("No heap corruption detected\n");
+		}
+	}
+#endif
 
 #if defined(CONFIG_BOARD_CRASHDUMP)
 	board_crashdump(up_getsp(), this_task(), (uint8_t *)filename, lineno);

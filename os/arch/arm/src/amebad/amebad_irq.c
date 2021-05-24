@@ -62,6 +62,11 @@
 #include <tinyara/arch.h>
 #include <arch/irq.h>
 
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+#include <tinyara/reboot_reason.h>
+#include <arch/reboot_reason.h>
+#endif
+
 #include "nvic.h"
 #include "ram_vectors.h"
 #include "up_arch.h"
@@ -140,8 +145,8 @@ static void amebad_dumpnvic(const char *msg, int irq)
 #endif
 
 /****************************************************************************
- * Name: amebad_nmi, amebad_busfault, amebad_usagefault, amebad_pendsv,
- *       amebad_dbgmonitor, amebad_pendsv, amebad_reserved
+ * Name: amebad_nmi, amebad_pendsv, amebad_dbgmonitor,
+ *       amebad_pendsv, amebad_reserved
  *
  * Description:
  *   Handlers for various execptions.  None are handled and all are fatal
@@ -155,22 +160,9 @@ static int amebad_nmi(int irq, FAR void *context, FAR void *arg)
 {
   (void)irqsave();
   dbg("PANIC!!! NMI received\n");
-  PANIC();
-  return 0;
-}
-
-static int amebad_busfault(int irq, FAR void *context, FAR void *arg)
-{
-  (void)irqsave();
-  dbg("PANIC!!! Bus fault received: %08x\n", getreg32(NVIC_CFAULTS));
-  PANIC();
-  return 0;
-}
-
-static int amebad_usagefault(int irq, FAR void *context, FAR void *arg)
-{
-  (void)irqsave();
-  dbg("PANIC!!! Usage fault received: %08x\n", getreg32(NVIC_CFAULTS));
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+  up_reboot_reason_write(REBOOT_SYSTEM_PREFETCHABORT);
+#endif
   PANIC();
   return 0;
 }
@@ -179,6 +171,9 @@ static int amebad_pendsv(int irq, FAR void *context, FAR void *arg)
 {
   (void)irqsave();
   dbg("PANIC!!! PendSV received\n");
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+  up_reboot_reason_write(REBOOT_SYSTEM_PREFETCHABORT);
+#endif
   PANIC();
   return 0;
 }
@@ -187,6 +182,9 @@ static int amebad_dbgmonitor(int irq, FAR void *context, FAR void *arg)
 {
   (void)irqsave();
   dbg("PANIC!!! Debug Monitor received\n");
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+  up_reboot_reason_write(REBOOT_SYSTEM_PREFETCHABORT);
+#endif
   PANIC();
   return 0;
 }
@@ -195,6 +193,9 @@ static int amebad_reserved(int irq, FAR void *context, FAR void *arg)
 {
   (void)irqsave();
   dbg("PANIC!!! Reserved interrupt\n");
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+  up_reboot_reason_write(REBOOT_SYSTEM_PREFETCHABORT);
+#endif
   PANIC();
   return 0;
 }
@@ -289,10 +290,6 @@ static int amebad_irqinfo(int irq, uintptr_t *regaddr, uint32_t *bit,
 
 void up_irqinitialize(void)
 {
-  uint32_t regaddr;
-  int num_priority_registers;
-  int i;
-
 
 #ifdef CONFIG_ARCH_RAMVECTORS
   /* If CONFIG_ARCH_RAMVECTORS is defined, then we are using a RAM-based
@@ -330,13 +327,14 @@ void up_irqinitialize(void)
 #endif
   /* Attach all other processor exceptions (except reset and sys tick) */
 
-#ifdef CONFIG_DEBUG
-  irq_attach(AMEBAD_IRQ_NMI, amebad_nmi, NULL);
 #ifdef CONFIG_ARMV8M_MPU
   irq_attach(AMEBAD_IRQ_MEMFAULT, up_memfault, NULL);
 #endif
-  irq_attach(AMEBAD_IRQ_BUSFAULT, amebad_busfault, NULL);
-  irq_attach(AMEBAD_IRQ_USAGEFAULT, amebad_usagefault, NULL);
+  irq_attach(AMEBAD_IRQ_BUSFAULT, up_busfault, NULL);
+  irq_attach(AMEBAD_IRQ_USAGEFAULT, up_usagefault, NULL);
+
+#ifdef CONFIG_DEBUG
+  irq_attach(AMEBAD_IRQ_NMI, amebad_nmi, NULL);
   irq_attach(AMEBAD_IRQ_PENDSV, amebad_pendsv, NULL);
   irq_attach(AMEBAD_IRQ_DBGMONITOR, amebad_dbgmonitor, NULL);
   irq_attach(AMEBAD_IRQ_RESERVED, amebad_reserved, NULL);
@@ -362,13 +360,13 @@ void up_irqinitialize(void)
 
 void up_disable_irq(int irq)
 {
-  uintptr_t regaddr;
-  uint32_t regval;
-  uint32_t bit;
 #if 1
 	  irq -= AMEBAD_IRQ_FIRST;
 	  __NVIC_DisableIRQ(irq);
 #else
+  uintptr_t regaddr;
+  uint32_t regval;
+  uint32_t bit;
   if (amebad_irqinfo(irq, &regaddr, &bit, NVIC_CLRENA_OFFSET) == 0)
     {
       /* Modify the appropriate bit in the register to disable the interrupt.
@@ -402,13 +400,13 @@ void up_disable_irq(int irq)
 
 void up_enable_irq(int irq)
 {
-	uintptr_t regaddr;
-	uint32_t regval;
-	uint32_t bit;
 #if 1
 	irq -= AMEBAD_IRQ_FIRST;
 	__NVIC_EnableIRQ(irq);
 #else
+	uintptr_t regaddr;
+	uint32_t regval;
+	uint32_t bit;
 	if (amebad_irqinfo(irq, &regaddr, &bit, NVIC_ENA_OFFSET) == 0)
 	{
 		/* Modify the appropriate bit in the register to enable the interrupt.
@@ -457,9 +455,6 @@ void up_ack_irq(int irq)
 #ifdef CONFIG_ARCH_IRQPRIO
 int up_prioritize_irq(int irq, int priority)
 {
-  uint32_t regaddr;
-  uint32_t regval;
-  int shift;
 
   DEBUGASSERT(irq >= AMEBAD_IRQ_MEMFAULT && irq < NR_IRQS &&
               (unsigned)priority <= NVIC_SYSH_PRIORITY_MIN);
@@ -468,6 +463,9 @@ int up_prioritize_irq(int irq, int priority)
   priority = priority >> (8U - __NVIC_PRIO_BITS);
   __NVIC_SetPriority(irq, priority); //use CMSIS for now
 #else
+  uint32_t regaddr;
+  uint32_t regval;
+  int shift;
   if (irq < AMEBAD_IRQ_FIRST)
     {
       /* NVIC_SYSH_PRIORITY() maps {0..15} to one of three priority

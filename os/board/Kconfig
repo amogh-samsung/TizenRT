@@ -133,6 +133,7 @@ config ARCH_BOARD_RTL8721CSM
 	select ARCH_HAVE_BUTTONS
 	select ARCH_HAVE_IRQBUTTONS
 	select ARCH_BOARD_HAVE_FLASH
+	select ARCH_HAVE_RAM_KERNEL_TEXT
 	---help---
 		Realtek RTL8721CSM-Discovery board based on the Realtek RTL8721CSM MCU.		
 endchoice
@@ -190,6 +191,12 @@ config ARCH_IRQBUTTONS
 	depends on ARCH_BUTTONS && ARCH_HAVE_IRQBUTTONS
 	---help---
 		"Support interrupts on button presses and releases."
+
+config ARCH_HAVE_RAM_KERNEL_TEXT
+	bool
+	default n
+	---help---
+		To support kernel text checks for RAM regions for supported boards.
 
 config BOARD_CRASHDUMP
 	bool "Enable Board level logging of crash dumps"
@@ -293,11 +300,11 @@ config BOARD_RAMDUMP_FLASH
 	---help---
 		If selected it will dump the RAM contents to flash.
 
-config BOARD_RAMDUMP_UART
-	bool "Enable ramdump via UART"
+config BOARD_DUMP_UART
+	bool "Enable dumping of RAM and FS contents via UART"
 	default n
 	---help---
-		If selected it will send the RAM dump via UART.
+		If selected it will allow sending RAM and FS dump via UART.
 endif
 
 comment "Board-Specific Options"

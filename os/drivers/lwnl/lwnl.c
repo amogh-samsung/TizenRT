@@ -28,37 +28,32 @@
 #include <errno.h>
 #include <debug.h>
 #include <net/if.h>
-#include <tinyara/kmalloc.h>
 #include <tinyara/fs/fs.h>
 #include <tinyara/lwnl/lwnl.h>
 #include "lwnl_evt_queue.h"
+#include "lwnl_log.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-#define DMA_BUFFER_MAX_SIZE 65536	/* 64K */
-
-#define DMA_BUFFER_MIN_SIZE 4096	/* 4K */
-
-#define LWNLDEV_LOCK(upper)						\
-	do {										\
-		ret = sem_wait(&upper->exclsem);		\
-		if (ret < 0) {							\
-			LWNL_ERR;						\
-			return ret;							\
-		}										\
+#define LWNLDEV_LOCK(upper)								\
+	do {												\
+		int lock_ret = sem_wait(&upper->exclsem);		\
+		if (lock_ret < 0) {								\
+			LWNL_ERR;									\
+			return lock_ret;							\
+		}												\
 	} while (0)
 
-#define LWNLDEV_UNLOCK(upper)					\
-	do {										\
-		sem_post(&upper->exclsem);				\
+#define LWNLDEV_UNLOCK(upper)							\
+	do {												\
+		sem_post(&upper->exclsem);						\
 	} while (0)
 
 
 /****************************************************************************
  * Private Types
  ****************************************************************************/
-
 struct lwnl_open_s {
 
 	/* The following will be true if we are closing */
@@ -94,13 +89,16 @@ static int lwnl_ioctl(struct file *filep, int cmd, unsigned long arg);
 static int lwnl_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup);
 #endif
 
+#ifndef CONFIG_NET_NETMGR
+extern int lwnl_message_handle(const char *msg, int msg_len);
+extern void lwnl_initialize_dev(void);
+#else
+extern int netdev_req_handle(const char *msg, size_t msg_len);
+#endif
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
-
-
-
 static const struct file_operations g_lwnl_fops = {
 	lwnl_open,                                          /* open */
 	lwnl_close,                                         /* close */
@@ -116,34 +114,25 @@ static const struct file_operations g_lwnl_fops = {
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
 static int lwnl_open(struct file *filep)
 {
 	LWNL_ENTER;
 	struct inode *inode = filep->f_inode;
 	struct lwnl_upperhalf_s *upper = inode->i_private;
-	int tmp_crefs;
-	int ret = -EMFILE;
 
-	tmp_crefs = upper->crefs + 1;
-	if (tmp_crefs == 0) {
-		goto errout;
-	}
+	LWNLDEV_LOCK(upper);
+	/*
+	 * crefs type is uint8 so overflow might happen.
+	 * However there are a few modules which use lwnl.
+	 * So checking overflow is not needed now.
+	 */
+	upper->crefs++;
+	LWNLDEV_UNLOCK(upper);
 
-	upper->crefs = tmp_crefs;
-
-	int res = lwnl_add_listener(filep);
-	if (res < 0) {
-		goto errout;
-	}
-
-	ret = OK;
-
-errout:
 	LWNL_LEAVE;
-	return ret;
-}
 
+	return OK;
+}
 
 static int lwnl_close(struct file *filep)
 {
@@ -151,57 +140,66 @@ static int lwnl_close(struct file *filep)
 	struct inode *inode = filep->f_inode;
 	struct lwnl_upperhalf_s *upper = inode->i_private;
 	int ret = OK;
+#ifndef CONFIG_DISABLE_POLL
+	FAR struct lwnl_open_s *ln_open = &upper->ln_open;
+	int waiter_idx;
+#endif
 
+	LWNLDEV_LOCK(upper);
 	if (upper->crefs > 0) {
 		upper->crefs--;
 	} else {
-		ret = -ENOSYS;
+		/*
+		 * lwnl driver doesn't have resources to free. So it doesn't care
+		 * upper->cres == 0 case
+		 */
+		ret = -EBADF;
 	}
+
+#ifndef CONFIG_DISABLE_POLL
+
+	/*
+	 * Check if this file is registered in a list of waiters for polling.
+	 * If it is, the used slot should be cleared.
+	 * Otherwise, an invalid pollfd remains in a list and this slot is not available forever.
+	 */
+	for (waiter_idx = 0; waiter_idx < LWNL_NPOLLWAITERS; waiter_idx++) {
+		struct pollfd *fds = ln_open->io_fds[waiter_idx];
+		if (fds && (FAR struct file *)fds->filep == filep) {
+			ln_open->io_fds[waiter_idx] = NULL;
+		}
+	}
+#endif
+	LWNLDEV_UNLOCK(upper);
 
 	int res = lwnl_remove_listener(filep);
 	if (res < 0) {
 		ret = -ENOSYS;
-		goto errout;
 	}
 
-errout:
 	LWNL_LEAVE;
 	return ret;
 }
 
-
 static ssize_t lwnl_read(struct file *filep, char *buffer, size_t len)
 {
 	LWNL_ENTER;
+
 	int res = lwnl_get_event(filep, buffer, len);
+
 	// todo_net : convert res to vfs error style?
 	LWNL_LEAVE;
 	return res;
 }
 
-#ifndef CONFIG_NET_NETMGR
-extern int lwnl_message_handle(const char *msg, int msg_len);
-extern void lwnl_initialize_dev(void);
-#else
-extern int netdev_req_handle(const char *msg, size_t msg_len);
-#endif
-
 static ssize_t lwnl_write(struct file *filep, const char *buffer, size_t len)
 {
 	LWNL_ENTER;
-	int ret = -EINVAL;
-	struct inode *inode = filep->f_inode;
-	struct lwnl_upperhalf_s *upper = inode->i_private;
-
-	LWNLDEV_LOCK(upper);
-
 #ifdef CONFIG_NET_NETMGR
-	ret = netdev_req_handle(buffer, len);
+	int ret = netdev_req_handle(buffer, len);
 #else
-	ret = lwnl_message_handle(buffer, len);
+	int ret = lwnl_message_handle(buffer, len);
 #endif
-
-	LWNLDEV_UNLOCK(upper);
 	LWNL_LEAVE;
 	if (ret < 0) {
 		return -1;
@@ -209,14 +207,16 @@ static ssize_t lwnl_write(struct file *filep, const char *buffer, size_t len)
 	return len;
 }
 
-
 static int lwnl_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
 	LWNL_ENTER;
-
-	return 0;
+	int res = lwnl_add_listener(filep);
+	if (res < 0) {
+		res = -EBADF;
+	}
+	LWNL_LEAVE;
+	return res;
 }
-
 
 static int lwnl_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
 {
@@ -224,40 +224,62 @@ static int lwnl_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
 
 	FAR struct inode *inode;
 	FAR struct lwnl_upperhalf_s *upper;
-	FAR struct lwnl_open_s *opriv;
+	FAR struct lwnl_open_s *ln_open;
 	int ret = 0;
 
 	DEBUGASSERT(filep && filep->f_inode);
 	inode = filep->f_inode;
 	DEBUGASSERT(inode->i_private);
 	upper  = (FAR struct lwnl_upperhalf_s *)inode->i_private;
-	opriv = &upper->ln_open;
-
-	/* Get exclusive access to the driver structure */
-	LWNLDEV_LOCK(upper);
+	ln_open = &upper->ln_open;
 
 	/* Are we setting up the poll? Or tearing it down? */
 	if (setup) {
+		/*  Check if any requested events are already in effect */
+		if (fds->events & POLLIN) {
+			int nready = lwnl_check_queue(filep);
+			if (nready > 0) {
+				fds->revents |= (fds->events & POLLIN);
+				sem_post(fds->sem);
+				return 0;
+			}
+		}
+
 		/*
 		 * This is a request to set up the poll. Find an available
 		 * slot for the poll structure reference
 		 */
+		/* Get exclusive access to the driver structure */
+		LWNLDEV_LOCK(upper);
 		int i = 0;
 		for (; i < LWNL_NPOLLWAITERS; i++) {
 			/* Find an available slot */
-			if (!opriv->io_fds[i]) {
+			if (!ln_open->io_fds[i]) {
 				/* Bind the poll structure and this slot */
-				opriv->io_fds[i] = fds;
-				fds->priv = &opriv->io_fds[i];
+				ln_open->io_fds[i] = fds;
+				fds->priv = &ln_open->io_fds[i];
+				fds->filep = (void *)filep;
 				break;
 			}
 		}
+		LWNLDEV_UNLOCK(upper);
 
 		if (i >= LWNL_NPOLLWAITERS) {
 			lldbg("ERROR: Too many poll waiters\n");
 			fds->priv = NULL;
 			ret       = -EBUSY;
 			goto errout_with_dusem;
+		}
+
+		/* Call lwnl_pollscan again: there could have been events between
+		   the last scan (without us on the list) and putting us on the list! */
+		if (fds->events & POLLIN) {
+			int nready = lwnl_check_queue(filep);
+			if (nready > 0) {
+				fds->revents |= (fds->events & POLLIN);
+				sem_post(fds->sem);
+				return 0;
+			}
 		}
 	} else if (fds->priv) {
 		/* This is a request to tear down the poll. */
@@ -269,8 +291,6 @@ static int lwnl_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
 	}
 
 errout_with_dusem:
-	LWNLDEV_UNLOCK(upper);
-
 	return ret;
 }
 
@@ -339,6 +359,7 @@ int lwnl_postmsg(lwnl_cb_status evttype, void *buffer)
 		return -1;
 	}
 
+	LWNLDEV_LOCK(g_lwnl_upper);
 	for (int i = 0; i < LWNL_NPOLLWAITERS; i++) {
 		struct pollfd *fds = g_lwnl_upper->ln_open.io_fds[i];
 		if (fds) {
@@ -348,7 +369,6 @@ int lwnl_postmsg(lwnl_cb_status evttype, void *buffer)
 			}
 		}
 	}
-
+	LWNLDEV_UNLOCK(g_lwnl_upper);
 	return 0;
 }
-

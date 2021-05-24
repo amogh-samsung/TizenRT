@@ -91,6 +91,8 @@
 #include <sys/boardctl.h>
 #endif
 
+#include <tinyara/mm/mm.h>
+
 #ifdef CONFIG_BINMGR_RECOVERY
 #include <stdbool.h>
 #include "binary_manager/binary_manager.h"
@@ -102,8 +104,8 @@
 #include "up_internal.h"
 #include "mpu.h"
 
-#ifdef CONFIG_BINMGR_RECOVERY
 bool abort_mode = false;
+#ifdef CONFIG_APP_BINARY_SEPARATION
 extern uint32_t g_assertpc;
 #endif
 
@@ -127,23 +129,6 @@ extern uint32_t g_assertpc;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: up_getsp
- ****************************************************************************/
-
-/* I don't know if the builtin to get SP is enabled */
-
-static inline uint32_t up_getsp(void)
-{
-	uint32_t sp;
-	__asm__
-	(
-		"\tmov %0, sp\n\t"
-		: "=r"(sp)
-	);
-	return sp;
-}
 
 /****************************************************************************
  * Name: up_stackdump
@@ -463,9 +448,7 @@ void up_assert(const uint8_t *filename, int lineno)
 {
 	board_led_on(LED_ASSERTION);
 
-#if defined(CONFIG_DEBUG_DISPLAY_SYMBOL) || defined(CONFIG_BINMGR_RECOVERY)
 	abort_mode = true;
-#endif
 
 #if CONFIG_TASK_NAME_SIZE > 0
 	lldbg("Assertion failed at file:%s line: %d task: %s\n", filename, lineno, this_task()->name);
@@ -473,7 +456,7 @@ void up_assert(const uint8_t *filename, int lineno)
 	lldbg("Assertion failed at file:%s line: %d\n", filename, lineno);
 #endif
 
-#ifdef CONFIG_BINMGR_RECOVERY
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	uint32_t assert_pc;
 	bool is_kernel_fault;
 
@@ -489,9 +472,22 @@ void up_assert(const uint8_t *filename, int lineno)
 
 	is_kernel_fault = is_kernel_space((void *)assert_pc);
 
-#endif  /* CONFIG_BINMGR_RECOVERY */
+#endif  /* CONFIG_APP_BINARY_SEPARATION */
 
 	up_dumpstate();
+
+	lldbg("Checking kernel heap for corruption...\n");
+	if (mm_check_heap_corruption(g_kmmheap) == OK) {
+		lldbg("No heap corruption detected\n");
+	}
+#ifdef CONFIG_APP_BINARY_SEPARATION
+	if (!is_kernel_fault) {
+		lldbg("Checking current app heap for corruption...\n");
+		if (mm_check_heap_corruption((struct mm_heap_s *)(this_task()->uheap)) == OK) {
+			lldbg("No heap corruption detected\n");
+		}
+	}
+#endif
 
 #if defined(CONFIG_BOARD_CRASHDUMP)
 	board_crashdump(up_getsp(), this_task(), (uint8_t *)filename, lineno);

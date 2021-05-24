@@ -22,24 +22,6 @@
 #ifndef __EXAMPLES_TESTCASE_FILESYSTEM_TC_INTERNAL_H
 #define __EXAMPLES_TESTCASE_FILESYSTEM_TC_INTERNAL_H
 
-#if defined(CONFIG_SIDK_S5JT200_AUTOMOUNT_USERFS)
-#define TMP_MOUNT_DEV_DIR CONFIG_SIDK_S5JT200_AUTOMOUNT_USERFS_DEVNAME
-#elif defined(CONFIG_ARTIK05X_AUTOMOUNT_USERFS)
-#define TMP_MOUNT_DEV_DIR CONFIG_ARTIK05X_AUTOMOUNT_USERFS_DEVNAME
-#elif defined(CONFIG_ESP32_AUTOMOUNT_USERFS_DEVNAME)
-#define TMP_MOUNT_DEV_DIR CONFIG_ESP32_AUTOMOUNT_USERFS_DEVNAME
-#elif defined(CONFIG_ARCH_BOARD_LM3S6965EK)
-#define TMP_MOUNT_DEV_DIR "/dev/smart0p0"
-#elif defined(CONFIG_IMXRT_AUTOMOUNT_USERFS)
-#define TMP_MOUNT_DEV_DIR CONFIG_IMXRT_AUTOMOUNT_USERFS_DEVNAME
-#elif defined(CONFIG_AMEBAD_AUTOMOUNT_USERFS_DEVNAME)
-#define TMP_MOUNT_DEV_DIR CONFIG_AMEBAD_AUTOMOUNT_USERFS_DEVNAME
-#else
-#define TMP_MOUNT_DEV_DIR "/dev/smart1"
-#endif
-
-#define SMARTFS_DEV_PATH TMP_MOUNT_DEV_DIR
-
 /**********************************************************
 * TC Function Declarations
 **********************************************************/
@@ -49,5 +31,9 @@ void tc_fs_smartfs_mksmartfs_p(void);
 void tc_fs_smartfs_mksmartfs_invalid_path_n(void);
 
 void itc_fs_main(void);
+
+#ifdef CONFIG_AUTOMOUNT_USERFS
+char *get_fs_mount_devname(void);
+#endif
 
 #endif /* __EXAMPLES_TESTCASE_FILESYSTEM_TC_INTERNAL_H */

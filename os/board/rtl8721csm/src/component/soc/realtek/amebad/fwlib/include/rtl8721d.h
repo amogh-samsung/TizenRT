@@ -75,22 +75,7 @@
 #endif
 #include <arm_cmse.h>   /* Use CMSE intrinsics */
 #include "core_armv8mml.h"
-#ifdef CONFIG_PLATFORM_TIZENRT_OS
-#include "cache.h"
-#define SCB_EnableICache arch_enable_icache
-#define SCB_EnableDCache arch_enable_dcache
-#define SCB_DisableICache arch_disable_icache
-#define SCB_DisableDCache arch_disable_dcache
-#define SCB_InvalidateICache arch_invalidate_icache_all
-#define SCB_InvalidateDCache arch_invalidate_dcache_all
-#define SCB_InvalidateDCache_by_Addr(addr, len) arch_invalidate_dcache((uintptr_t)addr, ((uintptr_t)addr + len))
-#define SCB_CleanDCache arch_clean_dcache_all
-#define SCB_CleanDCache_by_Addr(addr, len) arch_clean_dcache((uintptr_t)addr, ((uintptr_t)addr + len))
-#define SCB_CleanInvalidateDCache() do {arch_invalidate_dcache_all();arch_clean_dcache_all();} while(0)
-#define SCB_CleanInvalidateDCache_by_Addr(addr, len) do {arch_invalidate_dcache((uintptr_t)addr, ((uintptr_t)addr + len)); arch_clean_dcache((uintptr_t)addr, ((uintptr_t)addr + len));} while(0)
-#else
 #include "core_cache.h"
-#endif
 #elif defined (ARM_CORE_CM0)
 #define __ARMV8MBL_REV                 0x0000U  /*!< ARMV8MBL Core Revision                                                    */
 #define __NVIC_PRIO_BITS               2        /*!< Number of Bits used for Priority Levels                                   */
@@ -147,8 +132,8 @@
 #define FW_INFO_RSV4        (0x00)          // the firmware information reserved
 
 #define FLASH_HS_BOOT_ADDR				(SPI_FLASH_BASE + 0x4000)
-#define FLASH_RESERVED_DATA_BASE		0x2000  // reserve 8K for Image1
-#define FLASH_SYSTEM_DATA_ADDR		0x3000  // reserve 8K+4K for Image1 + Reserved data
+#define FLASH_RESERVED_DATA_BASE		0x80000  // Move to the place after write protection
+#define FLASH_SYSTEM_DATA_ADDR		0x81000  // Followed after reserved data
 #define FLASH_OTA1_CODE_ADDR			0x6020
 #define FLASH_SECTOR_SIZE				0x1000
 //BT calibration Data

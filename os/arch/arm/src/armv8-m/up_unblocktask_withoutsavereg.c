@@ -71,6 +71,9 @@
 #include <tinyara/debug/sysdbg.h>
 #endif
 
+#ifdef CONFIG_ARMV8M_TRUSTZONE
+#include <tinyara/tz_context.h>
+#endif
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -156,18 +159,18 @@ void up_unblock_task_without_savereg(struct tcb_s *tcb)
 #endif
 
 		/* Restore the MPU registers in case we are switching to an application task */
-#ifdef CONFIG_ARMV8_MPU
+#ifdef CONFIG_ARMV8M_MPU
 		/* Condition check : Update MPU registers only if this is not a kernel thread. */
 		if ((rtcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL) {
 #if defined(CONFIG_APP_BINARY_SEPARATION)
-			for (int i = 0; i < 3 * MPU_NUM_REGIONS; i += 3) {
+			for (int i = 0; i < MPU_REG_NUMBER * MPU_NUM_REGIONS; i += MPU_REG_NUMBER) {
 				up_mpu_set_register(&rtcb->mpu_regs[i]);
 			}
 #endif
-#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
-			up_mpu_set_register(rtcb->stack_mpu_regs);
-#endif
 		}
+#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
+		up_mpu_set_register(rtcb->stack_mpu_regs);
+#endif
 #endif
 
 #ifdef CONFIG_SUPPORT_COMMON_BINARY
@@ -180,6 +183,11 @@ void up_unblock_task_without_savereg(struct tcb_s *tcb)
 		rtcb->is_active = true;
 #endif
 
+#ifdef CONFIG_ARMV8M_TRUSTZONE
+		if (rtcb->tz_context) {
+			TZ_LoadContext_S(rtcb->tz_context);
+		}
+#endif
 		/* Then switch contexts */
 
 		up_restorestate(rtcb->xcp.regs);

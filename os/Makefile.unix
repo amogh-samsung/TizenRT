@@ -300,7 +300,7 @@ tools/mkversion$(HOSTEXEEXT):
 
 $(TOPDIR)/.version: force_build
 	echo "create .version file"; \
-	tools/version.sh -v 3.0 .version; \
+	tools/version.sh -v 3.1 .version; \
 	chmod 755 .version
 
 include/tinyara/version.h: $(TOPDIR)/.version tools/mkversion$(HOSTEXEEXT)
@@ -442,7 +442,6 @@ include LibTargets.mk
 
 ifeq ($(CONFIG_SUPPORT_COMMON_BINARY),y)
 LIBGCC = "${shell "$(CC)" $(ARCHCPUFLAGS) -print-libgcc-file-name}"
-COMMONLIBS = -luarch -luc -lumm -lproxies
 endif
 
 pass1deps: pass1dep $(USERLIBS)
@@ -451,7 +450,7 @@ pass1: pass1deps
 ifeq ($(CONFIG_BUILD_2PASS),y)
 	$(Q) $(MAKE) -C $(LOADABLE_APPDIR) TOPDIR="$(TOPDIR)" LOADABLEDIR="${LOADABLE_APPDIR}" LIBRARIES_DIR="$(LIBRARIES_DIR)" USERLIBS="$(USERLIBS)" all KERNEL=n
 ifeq ($(CONFIG_SUPPORT_COMMON_BINARY),y)
-	$(Q) $(LD) -r -o $(OUTBIN_DIR)/$(CONFIG_COMMON_BINARY_NAME) -T $(TOPDIR)/userspace/userspace_apps.ld -L $(LIBRARIES_DIR) --start-group $(COMMONLIBS) $(LIBGCC) --end-group $$(cat $(OUTBIN_DIR)/lib_symbols.txt)
+	$(Q) $(LD) -r -o $(OUTBIN_DIR)/$(CONFIG_COMMON_BINARY_NAME) -T $(TOPDIR)/userspace/userspace_apps.ld -L $(LIBRARIES_DIR) --start-group $(USERLIBS) $(LIBGCC) --end-group $$(cat $(OUTBIN_DIR)/lib_symbols.txt)
 	$(Q) if [ "`nm -u $(OUTBIN_DIR)/$(CONFIG_COMMON_BINARY_NAME) | wc -l`" != "0" ]; then \
 		echo "Undefined Symbols in Common binary"; \
 		nm -u -l $(OUTBIN_DIR)/$(CONFIG_COMMON_BINARY_NAME); \
@@ -491,8 +490,12 @@ ifeq ($(CONFIG_RAW_BINARY),y)
 	$(Q) $(OBJCOPY) $(OBJCOPYARGS) -O binary $(BIN) $(BIN).bin
 endif
 
+post:
 	$(Q) echo "Start the Board Specific Work for Binary"
 	$(Q) $(call MAKE_BOARD_SPECIFIC_BIN, $(BIN_EXE), $(BIN_EXT))
+	$(Q) $(call MAKE_SAMSUNG_HEADER, $(BIN_EXE), $(BIN_EXT))
+	$(Q) python ./tools/check_output_size.py
+	$(Q) $(call MAKE_BOOTPARAM)
 
 ifeq ($(CONFIG_UBOOT_UIMAGE),y)
 	@echo "MKIMAGE: uImage"
@@ -516,7 +519,7 @@ endif
 # pass1 dependencies and pass1 first, then build pass2 dependencies and pass2.
 # in that case, execute 'make pass1 pass2' from the command line.
 
-$(BIN): pass1deps pass2deps pass1 pass2
+$(BIN): pass1deps pass2deps pass1 pass2 post
 
 # download
 #

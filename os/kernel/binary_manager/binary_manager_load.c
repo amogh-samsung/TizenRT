@@ -110,6 +110,7 @@ static int binary_manager_load_binary(int bin_idx, char *path, load_attr_t *load
 			bmvdbg("Load '%s' success! pid = %d\n", path, ret);
 			/* Set the data in table from header */
 			BIN_LOAD_ATTR(bin_idx) = *load_attr;
+			strncpy(BIN_NAME(bin_idx), load_attr->bin_name, BIN_NAME_MAX);
 			bmvdbg("BIN TABLE[%d] %d %d %d %.1f %s\n", bin_idx, BIN_SIZE(bin_idx), BIN_RAMSIZE(bin_idx), BIN_LOADVER(bin_idx), BIN_KERNEL_VER(bin_idx), BIN_NAME(bin_idx));
 			return OK;
 		} else if (errno == ENOMEM) {
@@ -144,7 +145,7 @@ static int binary_manager_load(int bin_idx)
 	int bin_count;
 	load_attr_t load_attr;
 	char filepath[CONFIG_PATH_MAX];
-	binary_header_t header_data;
+	user_binary_header_t header_data;
 #ifdef CONFIG_OPTIMIZE_APP_RELOAD_TIME
 	struct binary_s *binp;
 #endif
@@ -189,7 +190,8 @@ static int binary_manager_load(int bin_idx)
 					break;
 				}
 			}
-			strncpy(load_attr.bin_name, header_data.bin_name, BIN_NAME_MAX);
+			strncpy(load_attr.bin_name, header_data.bin_name, BIN_NAME_MAX - 1);
+			load_attr.bin_name[BIN_NAME_MAX - 1] = '\0';
 			load_attr.bin_size = header_data.bin_size;
 			load_attr.compression_type = header_data.compression_type;
 			load_attr.ram_size = header_data.bin_ramsize;
@@ -207,7 +209,6 @@ static int binary_manager_load(int bin_idx)
 		ret = binary_manager_load_binary(bin_idx, filepath, &load_attr);
 		if (ret == OK) {
 			BIN_KERNEL_VER(bin_idx) = header_data.kernel_ver;
-			strncpy(BIN_NAME(bin_idx), header_data.bin_name, BIN_NAME_MAX);
 			return BINMGR_OK;
 		}
 		if (--bin_count > 0) {
@@ -231,6 +232,7 @@ static int binary_manager_terminate_binary(int bin_idx)
 {
 	int ret;
 	int binid;
+	int state;
 	bool need_recovery;
 	struct tcb_s *btcb;
 	struct tcb_s *tcb;
@@ -248,17 +250,22 @@ static int binary_manager_terminate_binary(int bin_idx)
 		return BINMGR_OPERATION_FAIL;
 	}
 
-	if (BIN_STATE(bin_idx) == BINARY_RUNNING) {
+	/* Save a current state and change a state to BINARY_UNLOADING to avoid duplicated function call */
+	state = BIN_STATE(bin_idx);
+	BIN_STATE(bin_idx) = BINARY_UNLOADING;
+
+	if (state == BINARY_RUNNING) {
 		need_recovery = true;
 		/* Waits until some callbacks for cleanup are done if registered callbacks exist */
-		BIN_STATE(bin_idx) = BINARY_WAITUNLOAD;
 		ret = binary_manager_send_statecb_msg(bin_idx, BIN_NAME(bin_idx), BINARY_READYTOUNLOAD, true);
 		if (ret != OK) {
+			bmdbg("Failed to execute callbacks for unloading %s\n", BIN_NAME(bin_idx));
+			/* Recover binary state on failure */
+			BIN_STATE(bin_idx) = state;
 			return ERROR;
 		}
 		/* Release all kernel semaphores held by the threads in binary */
 		binary_manager_release_binary_sem(bin_idx);
-		BIN_STATE(bin_idx) = BINARY_RUNNING;
 	}
 
 	/* Terminate all children created by a binary */
@@ -293,7 +300,7 @@ static int binary_manager_terminate_binary(int bin_idx)
 	}
 
 #ifdef CONFIG_OPTIMIZE_APP_RELOAD_TIME
-	if (BIN_STATE(bin_idx) == BINARY_FAULT) {
+	if (state == BINARY_FAULT) {
 		binp = BIN_LOADINFO(bin_idx);
 		binp->reload = true;
 	}
@@ -303,6 +310,8 @@ static int binary_manager_terminate_binary(int bin_idx)
 	ret = task_terminate_unloaded(btcb);
 	if (ret < 0) {
 		bmdbg("Failed to unload binary %s\n", BIN_NAME(bin_idx));
+		/* Recover binary state on failure */
+		BIN_STATE(bin_idx) = state;
 		return ERROR;
 	}
 	bmvdbg("Unload binary %s\n", BIN_NAME(bin_idx));
@@ -389,7 +398,7 @@ static int loadingall_thread(int argc, char *argv[])
 #ifdef CONFIG_SUPPORT_COMMON_BINARY
 	char libname[CONFIG_NAME_MAX];
 	snprintf(libname, CONFIG_NAME_MAX, "%s%s", CONFIG_COMMON_BINARY_PATH, CONFIG_COMMON_BINARY_NAME);
-	ret = load_binary(COMMLIB_IDX, libname, NULL);
+	ret = load_binary(BM_CMNLIB_IDX, libname, NULL);
 	if (ret < 0) {
 		return BINMGR_OPERATION_FAIL;
 	}
@@ -413,7 +422,7 @@ static int loadingall_thread(int argc, char *argv[])
 	for (bin_idx = 1; bin_idx <= bin_count; bin_idx++) {
 		if (BIN_LOAD_PRIORITY(bin_idx, BIN_USEIDX(bin_idx)) < BINARY_LOADPRIO_HIGH) {
 			ret = binary_manager_execute_loader(LOADCMD_LOAD, bin_idx);
-			if (ret > 0) {
+			if (ret == OK) {
 				load_cnt++;
 			}
 		}
@@ -444,13 +453,13 @@ static int reloading_thread(int argc, char *argv[])
 	/* argv[1] binary index for reloading */
 	int bin_idx = (int)atoi(argv[1]);
 #ifdef CONFIG_SUPPORT_COMMON_BINARY
-	if (bin_idx == BM_BINID_LIBRARY) {
+	if (bin_idx == BM_CMNLIB_IDX) {
 		int ret;
 
 		/* Reload common library and all binaries */
 		char libname[CONFIG_NAME_MAX];
 		snprintf(libname, CONFIG_NAME_MAX, "%s%s", CONFIG_COMMON_BINARY_PATH, CONFIG_COMMON_BINARY_NAME);
-		ret = load_binary(COMMLIB_IDX, libname, NULL);
+		ret = load_binary(BM_CMNLIB_IDX, libname, NULL);
 		if (ret < 0) {
 			return BINMGR_OPERATION_FAIL;
 		}
@@ -510,7 +519,7 @@ static int update_thread(int argc, char *argv[])
 	}
 
 	/* Terminate binary if binary is already loaded */
-	if (BIN_STATE(bin_idx) == BINARY_LOADING_DONE || BIN_STATE(bin_idx) == BINARY_RUNNING) {
+	if (BIN_STATE(bin_idx) == BINARY_LOADED || BIN_STATE(bin_idx) == BINARY_RUNNING) {
 		ret = binary_manager_terminate_binary(bin_idx);
 		if (ret != OK) {
 			bmdbg("Failed to terminate binary %s\n", BIN_NAME(bin_idx));
@@ -578,17 +587,19 @@ void binary_manager_release_binary_sem(int bin_idx)
  *	 This function reads header and checks whether it is valid or not.
  *
  ****************************************************************************/
-int binary_manager_read_header(char *path, binary_header_t *header_data, bool crc_check)
+int binary_manager_read_header(char *path, user_binary_header_t *header_data, bool crc_check)
 {
 	int fd;
 	int ret;
-	int read_size;
-	int file_size;
+	uint32_t read_size;
+	uint32_t file_size;
 	bool need_unlink;
 	uint32_t crc_value = 0;
-	uint8_t crc_buffer[CRC_BUFFER_SIZE];
+	uint8_t *crc_buffer;
+	uint32_t crc_bufsize;
 
-	memset(header_data, 0, sizeof(binary_header_t));
+	memset(header_data, 0, sizeof(user_binary_header_t));
+	crc_buffer = NULL;
 
 	need_unlink = false;
 
@@ -599,27 +610,34 @@ int binary_manager_read_header(char *path, binary_header_t *header_data, bool cr
 	}
 
 	/* Read the binary header */
-	ret = read(fd, (FAR uint8_t *)header_data, sizeof(binary_header_t));
-	if (ret != sizeof(binary_header_t)) {
+	ret = read(fd, (FAR uint8_t *)header_data, sizeof(user_binary_header_t));
+	if (ret != sizeof(user_binary_header_t)) {
 		bmdbg("Failed to read %s: %d, errno %d\n", path, ret, errno);
 		goto errout_with_fd;
 	}
 
 	/* Verify header data */
 	if (header_data->bin_type != BIN_TYPE_ELF || header_data->bin_ver == 0 \
-		|| header_data->loading_priority == 0 || header_data->loading_priority >= BINARY_LOADPRIO_MAX) {
+		|| header_data->loading_priority == 0 || header_data->loading_priority >= BINARY_LOADPRIO_MAX \
+		|| header_data->bin_ramsize == 0 || header_data->bin_size == 0) {
 		need_unlink = true;
-		bmdbg("Invalid header data : headersize %d, binsize %d, ramsize %d, bintype %d\n", header_data->header_size, header_data->bin_size, header_data->bin_ramsize, header_data->bin_type);
+		bmdbg("Invalid header data : headersize %u, binsize %u, ramsize %u, bintype %u\n", header_data->header_size, header_data->bin_size, header_data->bin_ramsize, header_data->bin_type);
 		goto errout_with_fd;
 	}
 
 	if (crc_check) {
+		crc_bufsize = header_data->bin_ramsize;
+		crc_buffer = (uint8_t *)kmm_malloc(crc_bufsize);
+		if (!crc_buffer) {
+			bmdbg("Failed to allocate buffer for checking crc, size %u\n", crc_bufsize);
+			goto errout_with_fd;
+		}
 		/* Calculate checksum and Verify it */
 		crc_value = crc32part((uint8_t *)header_data + CHECKSUM_SIZE, header_data->header_size, crc_value);
 		file_size = header_data->bin_size;
 		while (file_size > 0) {
-			read_size = file_size < CRC_BUFFER_SIZE ? file_size : CRC_BUFFER_SIZE;
-			ret = read(fd, (FAR uint8_t *)crc_buffer, read_size);
+			read_size = file_size < crc_bufsize ? file_size : crc_bufsize;
+			ret = read(fd, (void *)crc_buffer, read_size);
 			if (ret < 0 || ret != read_size) {
 				bmdbg("Failed to read : %d, errno %d\n", ret, errno);
 				goto errout_with_fd;
@@ -633,8 +651,9 @@ int binary_manager_read_header(char *path, binary_header_t *header_data, bool cr
 			bmdbg("Failed to crc check : %u != %u\n", crc_value, header_data->crc_hash);
 			goto errout_with_fd;
 		}
+		kmm_free(crc_buffer);
 	}
-	bmvdbg("Binary header : %d %d %d %d %s %d %d %.1f %d\n", header_data->header_size, header_data->bin_type, header_data->bin_size, header_data->loading_priority, header_data->bin_name, header_data->bin_ver, header_data->bin_ramsize, header_data->kernel_ver, header_data->jump_addr);
+	bmvdbg("Binary header : %d %d %d %d %s %d %d %d\n", header_data->header_size, header_data->bin_type, header_data->bin_size, header_data->loading_priority, header_data->bin_name, header_data->bin_ver, header_data->bin_ramsize, header_data->kernel_ver);
 	close(fd);
 
 	return OK;
@@ -643,6 +662,9 @@ errout_with_fd:
 	close(fd);
 	if (need_unlink) {
 		unlink(path);
+	}
+	if (crc_buffer) {
+		kmm_free(crc_buffer);
 	}
 	return ERROR;
 }
@@ -684,9 +706,11 @@ int binary_manager_execute_loader(int cmd, int bin_idx)
 	case LOADCMD_LOAD_ALL:
 		loader_func = loadingall_thread;
 		break;
+#ifdef CONFIG_BINMGR_RECOVERY
 	case LOADCMD_RELOAD:
 		loader_func = reloading_thread;
 		break;
+#endif
 	case LOADCMD_UPDATE:
 		loader_func = update_thread;
 		break;
@@ -699,8 +723,9 @@ int binary_manager_execute_loader(int cmd, int bin_idx)
 	ret = kernel_thread(LOADER_NAME, loader_priority, LOADER_STACKSIZE, loader_func, (char * const *)loading_data);
 	if (ret > 0) {
 		bmvdbg("Execute loading thread with pid %d\n", ret);
+		ret = OK;
 	} else {
-		bmdbg("Loading Fail\n");
+		bmdbg("Loading Fail, errno %d\n", errno);
 	}
 
 	return ret;

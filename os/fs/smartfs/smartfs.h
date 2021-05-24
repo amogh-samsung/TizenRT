@@ -228,7 +228,6 @@
 #define SMARTFS_BFLAG_UNMOD       0x00	/* Set if there are no unsynced changes in sf->buffer */
 #define SMARTFS_BFLAG_DIRTY       0x01	/* Set if data changed in the sector */
 #define SMARTFS_BFLAG_NEWALLOC    0x02	/* Set if sector not written since alloc */
-#define SMARTFS_BFLAG_NEW_ENTRY   0x04	/* Set if the open file structure object corresponds to a new file entry yet to be written to MTD */
 
 #define SMARTFS_ERASEDSTATE_16BIT (uint16_t)((CONFIG_SMARTFS_ERASEDSTATE << 8) | \
 								  CONFIG_SMARTFS_ERASEDSTATE)
@@ -248,6 +247,8 @@
 #if !defined(CONFIG_SMARTFS_DYNAMIC_HEADER) || !defined(CONFIG_MTD_SMART_SECTOR_SIZE)
 #undef  CONFIG_SMARTFS_DYNAMIC_HEADER
 #endif
+
+#define SMARTFS_AVAIL_DATABYTES(f) f->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s)
 
 /****************************************************************************
  * Public Types
@@ -294,12 +295,6 @@ struct smartfs_chain_header_s {
 	uint8_t nextsector[4];		/* Next logical sector in the chain */
 	uint8_t used[4];			/* Number of bytes used in this sector */
 	uint8_t type;				/* Type of sector entry (file or dir) */
-};
-#elif defined(CONFIG_MTD_SMART_ENABLE_CRC) && defined(CONFIG_SMART_CRC_16)
-struct smartfs_chain_header_s {
-	uint8_t type;				/* Type of sector entry (file or dir) */
-	uint8_t nextsector[2];		/* Next logical sector in the chain */
-	uint8_t used[2];			/* Number of bytes used in this sector */
 };
 #else
 struct smartfs_chain_header_s {

@@ -37,6 +37,7 @@
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <netinet/in.h>
 #include <netinet/ether.h>
 
@@ -100,7 +101,6 @@ extern int netdb_main(int argc, char *argv[]);
 			goto endout;                        \
 		}                                       \
 	} while (0)
-
 static void nic_display_state(void)
 {
 	struct ifreq *ifr;
@@ -111,6 +111,15 @@ static void nic_display_state(void)
 	int fd;
 	int numreqs = 3;
 	int num_nic = 0;
+
+	// to get ipv6 address call netlib_getifaddrs()
+	struct ifaddrs *ifa = NULL, *ifp = NULL;
+	ret = netlib_getifaddrs(&ifa);
+	if (ret < 0) {
+		printf("get ifaddrs fail\n");
+		return;
+	}
+
 	fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
 		ndbg("fail %s:%d\n", __FUNCTION__, __LINE__);
@@ -167,14 +176,21 @@ static void nic_display_state(void)
 		} else {
 			printf("MTU: %d\n", ifr->ifr_mtu);
 		}
-#ifdef CONFIG_NET_IPv6_NUM_ADDRESSES
-		// Todo: there is no way to get IPv6 info by VFS.
-		// nic_display_state have to provide ioctl command to get it.
-		printf("Not support yet to get IPv6 address\n");
-#endif /* CONFIG_NET_IPv6_NUM_ADDRESSES */
+
+		for (ifp = ifa; ifp; ifp = ifp->ifa_next) {
+			if (ifp->ifa_addr && ifp->ifa_addr->sa_family == AF_INET6
+				&& !strncmp(ifr->ifr_name, ifp->ifa_name, IFNAMSIZ)) {
+				struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ifp->ifa_addr;
+				char ipaddr[INET6_ADDRSTRLEN + 1] = {0,};
+				memset(ipaddr, 0, INET6_ADDRSTRLEN + 1);
+				inet_ntop(AF_INET6, (void *)&(sin6->sin6_addr), ipaddr, INET6_ADDRSTRLEN);
+				printf("\tinet6: %s\n", ipaddr);
+			}
+		}
 		printf("\n");
 	}
 DONE:
+	netlib_freeifaddrs(ifa);
 	free(ifcfg.ifc_buf);
 	close(fd);
 }
@@ -382,44 +398,23 @@ static int _cmd_ifconfig_setipaddr(struct ifconfig_cmd_info_s *info)
 static int _cmd_ifconfig_setdns(struct ifconfig_cmd_info_s *info)
 {
 	int ret = OK;
-	struct in_addr addr;
-	struct req_lwip_data req;
-	int sock;
+	struct sockaddr_in dns_addr;
 
 	if (info->dns) {
 		ndbg("DNS: %s\n", info->dns);
-		addr.s_addr = inet_addr(info->dns);
-#ifdef CONFIG_NET_LWIP    // this is temporal fix. it should be modified later
-		ip_addr_t dns_addr;
-		IP_SET_TYPE_VAL(dns_addr, IPADDR_TYPE_V4);
-#ifdef CONFIG_NET_IPv6
-		dns_addr.u_addr.ip4.addr = addr.s_addr;
-#else
-		dns_addr.addr = addr.s_addr;
-#endif
-		sock = socket(AF_INET, SOCK_DGRAM, 0);
-		if (sock < 0) {
-			ndbg("dnsclient : socket() failed with errno: %d\n", errno);
-			return ERROR;
-		}
 
-		memset(&req, 0, sizeof(req));
-		req.type = DNSSETSERVER;
-		req.num_dns = 0;
-		req.dns_server = &dns_addr;
+		dns_addr.sin_addr.s_addr = inet_addr(info->dns);
+		dns_addr.sin_family = AF_INET;
 
-		ret = ioctl(sock, SIOCLWIP, (unsigned long)&req);
-		if (ret == ERROR) {
-			ndbg("dnsclient : ioctl() failed with errno: %d\n", errno);
-			close(sock);
-			return ret;
+		ret = netlib_setdnsserver((struct sockaddr *)&dns_addr, -1);
+		if (ret < 0) {
+			ndbg("set dns server fail (%d)\n", ret);
 		}
-		close(sock);
-#endif /*  CONFIG_NET_LWIP */
 	}
 
 	return ret;
 }
+
 int cmd_ifconfig(int argc, char **argv)
 {
 	int ret;
@@ -478,14 +473,17 @@ const static tash_cmdlist_t net_utilcmds[] = {
 	{"ifconfig", cmd_ifconfig, TASH_EXECMD_SYNC},
 	{"ifdown", cmd_ifdown, TASH_EXECMD_SYNC},
 	{"ifup", cmd_ifup, TASH_EXECMD_SYNC},
-#ifdef NET_LWIP_STATS_DISPLAY
-	{"lwip_stats", stats_display, TASH_EXECMD_ASYNC},
+#ifdef CONFIG_NETUTILS_STATS_DISPLAY_TOOL
+	{"net_stats", cmd_netstats, TASH_EXECMD_ASYNC},
 #endif
 #ifdef CONFIG_NET_NETMON
 	{"netmon", cmd_netmon, TASH_EXECMD_ASYNC},
 #endif
 #ifdef CONFIG_NET_PING_CMD
 	{"ping", cmd_ping, TASH_EXECMD_ASYNC},
+#ifdef CONFIG_NET_IPv6
+	{"ping6", cmd_ping6, TASH_EXECMD_ASYNC},
+#endif
 #endif
 #ifdef CONFIG_NETUTILS_TFTPC
 	{"tftpc", cmd_tftpc, TASH_EXECMD_SYNC},

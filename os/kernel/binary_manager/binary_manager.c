@@ -28,14 +28,30 @@
 #include <string.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <sys/boardctl.h>
 
 #include <tinyara/binary_manager.h>
 #ifdef CONFIG_BINMGR_RECOVERY
 #include <tinyara/kthread.h>
 #endif
 
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+#include <tinyara/reboot_reason.h>
+#include <arch/reboot_reason.h>
+#endif
+
 #include "sched/sched.h"
 #include "binary_manager.h"
+
+#if CONFIG_MQ_MAXMSGSIZE < (CONFIG_NAME_MAX + 64)
+/* The largest size of messages is (CONFIG_NAME_MAX + 64) for communication with binary manager */
+#error "CONFIG_MQ_MAXMSGSIZE should be greater than (CONFIG_NAME_MAX + 64)"
+#endif
+#ifndef CONFIG_BOARDCTL_RESET
+/* CONFIG_BOARDCTL_RESET should be enabled for kernel binary update */
+#error "CONFIG_BOARDCTL_RESET should be enabled for kernel binary update"
+#endif
+
 
 /****************************************************************************
  * Private Definitions
@@ -69,18 +85,21 @@ mqd_t binary_manager_get_mqfd(void)
  ****************************************************************************/
 int binary_manager(int argc, char *argv[])
 {
-	int ret;
 	int nbytes;
 #if !defined(CONFIG_DISABLE_SIGNALS)
 	sigset_t sigset;
 #endif
 	struct mq_attr attr;
 	binmgr_request_t request_msg;
+#ifdef CONFIG_APP_BINARY_SEPARATION
+	int ret;
 
 	/* Scan user binary files and Register them */
 	binary_manager_scan_ubin_all();
 
-	ASSERT(binary_manager_get_kcount() > 0 && binary_manager_get_ucount() > 0);
+	ASSERT(binary_manager_get_ucount() > 0);
+#endif
+	ASSERT(binary_manager_get_kcount() > 0 && binary_manager_scan_kbin());
 
 	bmvdbg("Binary Manager STARTED\n");
 
@@ -110,12 +129,16 @@ int binary_manager(int argc, char *argv[])
 		return 0;
 	}
 
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	/* Execute loading thread for load all binaries */
 	ret = binary_manager_execute_loader(LOADCMD_LOAD_ALL, 0);
-	if (ret <= 0) {
-		bmdbg("Failed to create loading thread\n");
-		goto binary_manager_exit;
+	if (ret != OK) {
+		bmdbg("Failed to create loading thread, EXIT\n");
+		mq_close(g_binmgr_mq_fd);
+		mq_unlink(BINMGR_REQUEST_MQ);
+		return 0;
 	}
+#endif
 
 	while (1) {
 		bmvdbg("Wait for message\n");
@@ -125,7 +148,7 @@ int binary_manager(int argc, char *argv[])
 			continue;
 		}
 
-		bmvdbg("Recevied Request msg : cmd = %d\n", request_msg);
+		bmvdbg("Received Request msg : cmd = %d\n", request_msg);
 		switch (request_msg.cmd) {
 #ifdef CONFIG_BINMGR_RECOVERY
 		case BINMGR_FAULT:
@@ -138,11 +161,24 @@ int binary_manager(int argc, char *argv[])
 		case BINMGR_GET_INFO_ALL:
 			binary_manager_get_info_all(request_msg.requester_pid);
 			break;
-		case BINMGR_UPDATE:
-			binary_manager_execute_loader(LOADCMD_UPDATE, binary_manager_get_index_with_name(request_msg.data.bin_name));
-			break;
 		case BINMGR_CREATE_BIN:
 			binary_manager_create_entry(request_msg.requester_pid, request_msg.data.update_bin.bin_name, request_msg.data.update_bin.version);
+			break;
+		case BINMGR_UPDATE:
+			if (!strncmp("kernel", request_msg.data.bin_name, BIN_NAME_MAX)) {
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+				up_reboot_reason_write(REBOOT_SYSTEM_BINARY_UPDATE);
+#endif
+				boardctl(BOARDIOC_RESET, EXIT_SUCCESS);
+				break;
+			}
+#ifdef CONFIG_APP_BINARY_SEPARATION
+			binary_manager_execute_loader(LOADCMD_UPDATE, binary_manager_get_index_with_name(request_msg.data.bin_name));
+#endif
+			break;
+#ifdef CONFIG_APP_BINARY_SEPARATION
+		case BINMGR_GET_STATE:
+			binary_manager_get_state_with_name(request_msg.requester_pid, (char *)request_msg.data.bin_name);
 			break;
 		case BINMGR_NOTIFY_STARTED:
 			binary_manager_update_running_state(request_msg.requester_pid);
@@ -153,16 +189,12 @@ int binary_manager(int argc, char *argv[])
 		case BINMGR_UNREGISTER_STATECB:
 			binary_manager_unregister_statecb(request_msg.requester_pid);
 			break;
+#endif
 		default:
+			bmvdbg("Invalid cmd = %d\n", request_msg.cmd);
 			break;
 		}
 	}
-
-binary_manager_exit:
-	bmvdbg("Binary Manager EXITED\n");
-
-	mq_close(g_binmgr_mq_fd);
-	mq_unlink(BINMGR_REQUEST_MQ);
 
 	return 0;
 }

@@ -3,54 +3,61 @@
 # see kconfig-language at https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
 #
 
-if NET_IPv6_ND
+menu "Neighbor Discovery (RFC 4861)"
+
+config NET_IPv6_ND
+	bool
+	depends on NET_IPv6
+	default y
+	---help---
+		Built in support for IPv6 Neighbor Discovery.
 
 config NET_IPv6_ND_QUEUEING
 	bool "Enable queue outgoing IPv6 packets while MAC address"
 	default y
 	---help---
-		Enable queue outgoing IPv6 packets while MAC address.	
+		Enable queue outgoing IPv6 packets while MAC address.
 
 
 config NET_IPv6_ND_QUEUE
 	int "Max number of IPv6 packets to queue during MAC resolution"
 	default 20
 	---help---
-		Max number of IPv6 packets to queue during MAC resolution.	
+		Max number of IPv6 packets to queue during MAC resolution.
 
 config NET_IPv6_ND_NUM_NEIGHBORS
 	int "Number of entries in IPv6 neighbor cache"
 	default 10
 	---help---
-		Number of entries in IPv6 neighbor cache.	
+		Number of entries in IPv6 neighbor cache.
 
 config NET_IPv6_ND_NUM_DESTINATIONS
 	int "Number of entries in IPv6 destination cache"
 	default 10
 	---help---
-		Number of entries in IPv6 destination cache.	
+		Number of entries in IPv6 destination cache.
 
 config NET_IPv6_ND_NUM_PREFIXES
 	int "Number of entries in IPv6 on-link prefixes cache"
-	default 5 
+	default 5
 	---help---
-		Number of entries in IPv6 on-link prefixes cache.	
+		Number of entries in IPv6 on-link prefixes cache.
 
 config NET_IPv6_ND_NUM_ROUTERS
 	int "Number of entries in IPv6 default router cache"
-	default 3 
+	default 3
 	---help---
-		Number of entries in IPv6 default router cache.	
+		Number of entries in IPv6 default router cache.
 
 config NET_IPv6_ND_MAX_MULTICAST_SOLICIT
 	int "Max number of multicast solicit messages to send"
-	default 3 
+	default 3
 	---help---
-		Max number of multicast solicit messages to send.	
+		Max number of multicast solicit messages to send.
 
 config NET_IPv6_ND_MAX_UNICAST_SOLICIT
 	int "Max number of unicast neighbor solicitation messages"
-	default 3 
+	default 3
 	---help---
 		Max number of unicast neighbor solicitation messages
 		to send during neighbor reachability detection.
@@ -80,7 +87,7 @@ config NET_IPv6_ND_DELAY_FIRST_PROBE_TIME
 	---help---
 		Delay before first unicast neighbor solicitation
 		message is sent, during neighbor reachability detection.
-	
+
 config NET_IPv6_ND_ALLOW_RA_UPDATES
 	bool "Allow Router Advertisement messages to update"
 	default y
@@ -104,5 +111,4 @@ config NET_IPv6_ND_RDNSS_MAX_DNS_SERVERS
 		(as per RFC 6106) to copy a defined maximum number of DNS
 		servers to the DNS module.
 
-
-endif
+endmenu

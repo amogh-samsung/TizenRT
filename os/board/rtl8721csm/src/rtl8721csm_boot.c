@@ -67,6 +67,9 @@
 #include <tinyara/fs/mtd.h>
 #endif
 #include <arch/board/board.h>
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+#include <arch/reboot_reason.h>
+#endif
 #include "gpio_api.h"
 #include "timer_api.h"
 #ifdef CONFIG_FLASH_PARTITION
@@ -182,37 +185,31 @@ void amebad_mount_partions(void)
 #ifdef CONFIG_FLASH_PARTITION
 	int ret;
 	struct mtd_dev_s *mtd;
+	partition_info_t partinfo;
 
 	mtd = (FAR struct mtd_dev_s *)mtd_initialize();
 	/* Configure mtd partitions */
-	ret = configure_mtd_partitions(mtd, &g_flash_part_data);
+	ret = configure_mtd_partitions(mtd, &g_flash_part_data, &partinfo);
 	if (ret != OK) {
 		lldbg("ERROR: configure_mtd_partitions failed\n");
 		return;
 	}
-#ifdef CONFIG_AMEBAD_AUTOMOUNT
-#ifdef CONFIG_AMEBAD_AUTOMOUNT_USERFS
-	/* Initialize and mount user partition (if we have) */
-	ret = mksmartfs(CONFIG_AMEBAD_AUTOMOUNT_USERFS_DEVNAME, false);
-	if (ret != OK) {
-		lldbg("ERROR: mksmartfs on %s failed\n", CONFIG_AMEBAD_AUTOMOUNT_USERFS_DEVNAME);
-	} else {
-		ret = mount(CONFIG_AMEBAD_AUTOMOUNT_USERFS_DEVNAME, CONFIG_AMEBAD_AUTOMOUNT_USERFS_MOUNTPOINT, "smartfs", 0, NULL);
-		if (ret != OK) {
-			lldbg("ERROR: mounting '%s' failed\n", CONFIG_AMEBAD_AUTOMOUNT_USERFS_DEVNAME);
-		}
-	}
-#endif /* CONFIG_AMEBAD_AUTOMOUNT_USERFS */
 
-#ifdef CONFIG_AMEBAD_AUTOMOUNT_ROMFS
-	ret = mount(CONFIG_AMEBAD_AUTOMOUNT_ROMFS_DEVNAME, CONFIG_AMEBAD_AUTOMOUNT_ROMFS_MOUNTPOINT, "romfs", 0, NULL);
-	if (ret != OK) {
-		lldbg("ERROR: mounting '%s'(ROMFS) failed\n", CONFIG_AMEBAD_AUTOMOUNT_ROMFS_DEVNAME);
-	}
-#endif /* CONFIG_AMEBAD_AUTOMOUNT_ROMFS */
-#endif /* CONFIG_AMEBAD_AUTOMOUNT */
+#ifdef CONFIG_AUTOMOUNT
+	automount_fs_partition(&partinfo);
+#endif
+
 #endif /* CONFIG_FLASH_PARTITION */
 }
+
+#ifdef CONFIG_FTL_ENABLED
+extern const u8 ftl_phy_page_num;
+extern const u32 ftl_phy_page_start_addr;
+static void app_ftl_init(void)
+{
+	ftl_init(ftl_phy_page_start_addr, ftl_phy_page_num);
+}
+#endif
 
 /****************************************************************************
  * Name: board_initialize
@@ -230,6 +227,24 @@ void amebad_mount_partions(void)
 #ifdef CONFIG_BOARD_INITIALIZE
 void board_initialize(void)
 {
+	SOCPS_InitSYSIRQ_HP();
+	memcpy_gdma_init();
+	if (wifi_config.wifi_ultra_low_power &&
+		wifi_config.wifi_app_ctrl_tdma == FALSE) {
+		SystemSetCpuClk(CLK_KM4_100M);
+	}
+
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+	up_reboot_reason_init();
+#endif
+
+	InterruptRegister(IPC_INTHandler, IPC_IRQ, (u32)IPCM0_DEV, 5);
+	InterruptEn(IPC_IRQ, 5);
+	/* init console */
+	shell_recv_all_data_onetime = 1;
+	shell_init_rom(0, 0);
+	//shell_init_ram();
+	ipc_table_init();
 	amebad_mount_partions();
 	board_gpio_initialize();
 #ifdef CONFIG_WATCHDOG
@@ -243,5 +258,28 @@ void board_initialize(void)
 		amebad_timer_initialize(path, i);
 	}
 #endif
-}
+
+#ifdef CONFIG_RTC_DRIVER
+	struct rtc_lowerhalf_s *rtclower;
+	int ret;
+
+	rtclower = amebad_rtc_lowerhalf();
+	if (rtclower) {
+		ret = rtc_initialize(0, rtclower);
+		if (ret < 0) {
+			lldbg("Failed to register the RTC driver: %d\n", ret);
+		}
+	}
 #endif
+#ifdef CONFIG_FTL_ENABLED
+	app_ftl_init();
+#endif
+}
+#else
+#error "CONFIG_BOARD_INITIALIZE MUST ENABLE"
+#endif
+
+int board_app_initialize(void)
+{
+	return OK;
+}

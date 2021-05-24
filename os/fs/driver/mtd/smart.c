@@ -290,7 +290,7 @@ struct smart_struct_s {
 	uint8_t minwearlevel;		/* Min level in the wear level bits */
 	uint8_t maxwearlevel;		/* Max level in the wear level bits */
 	uint8_t *wearstatus;		/* Array of wear leveling bits */
-	uint32_t uneven_wearcount;	/* Number of times the the wear level has gone over max */
+	uint32_t uneven_wearcount;	/* Number of times the wear level has gone over max */
 #endif
 #ifdef CONFIG_MTD_SMART_ENABLE_CRC
 	FAR struct smart_allocsector_s *allocsector;	/* Pointer to first alloc sector */
@@ -941,9 +941,9 @@ static ssize_t smart_write(FAR struct inode *inode, FAR const unsigned char *buf
 
 	/* Convert SMART blocks into MTD blocks. */
 
-	mtdstartblock = start_sector * dev->mtdBlksPerSector;
-	mtdblockcount = nsectors * dev->mtdBlksPerSector;
-	mtdBlksPerErase = dev->mtdBlksPerSector * dev->sectorsPerBlk;
+	mtdstartblock = (off_t)start_sector * (off_t)dev->mtdBlksPerSector;
+	mtdblockcount = (off_t)nsectors * (off_t)dev->mtdBlksPerSector;
+	mtdBlksPerErase = (off_t)dev->mtdBlksPerSector * (off_t)dev->sectorsPerBlk;
 
 	fvdbg("mtdsector: %d mtdnsectors: %d\n", mtdstartblock, mtdblockcount);
 
@@ -1342,6 +1342,41 @@ errexit:
 }
 
 /****************************************************************************
+ * Name: smart_byte_to_block_write
+ *
+ * Description: To support write some bytes to flash if architecture
+ *              doesn't support bytewrite, first read entire of sector,
+ *              and then do blockwrite after merge rwbuffer & buffer.
+ *
+ ****************************************************************************/
+static int smart_byte_to_block_write(FAR struct smart_struct_s *dev, size_t offset, int nbytes, FAR const uint8_t *buffer)
+{
+	uint32_t startblock;
+	uint16_t nblocks;
+	int ret = OK;
+	/* First calculate the start block and number of blocks affected. */
+	
+	startblock = offset / dev->geo.blocksize;
+	nblocks = (offset - startblock * dev->geo.blocksize + nbytes + dev->geo.blocksize - 1) / dev->geo.blocksize;
+	ret = MTD_BREAD(dev->mtd, startblock, nblocks, (FAR uint8_t *)dev->bytebuffer);
+	if (ret < 0) {
+		fdbg("Error %d reading from device\n", -ret);
+		return ret;
+	}
+
+	memcpy(&dev->bytebuffer[offset - startblock * dev->geo.blocksize], buffer, nbytes);
+	
+	/* Write the data back to the device. */
+	
+	ret = MTD_BWRITE(dev->mtd, startblock, nblocks, (FAR uint8_t *)dev->bytebuffer);
+	if (ret < 0) {
+		fdbg("Error %d writing to device\n", -ret);
+		return ret;
+	}
+	return nbytes;
+}
+
+/****************************************************************************
  * Name: smart_bytewrite
  *
  * Description: Writes a non-page size count of bytes to the underlying
@@ -1369,37 +1404,7 @@ static ssize_t smart_bytewrite(FAR struct smart_struct_s *dev, size_t offset, in
 #endif
 	{
 		/* Perform block-based read-modify-write. */
-
-		uint32_t startblock;
-		uint16_t nblocks;
-
-		/* First calculate the start block and number of blocks affected. */
-
-		startblock = offset / dev->geo.blocksize;
-		nblocks = (offset - startblock * dev->geo.blocksize + nbytes + dev->geo.blocksize - 1) / dev->geo.blocksize;
-
-		DEBUGASSERT(nblocks <= dev->mtdBlksPerSector);
-
-		/* Do a block read. */
-
-		ret = MTD_BREAD(dev->mtd, startblock, nblocks, (FAR uint8_t *)dev->bytebuffer);
-		if (ret < 0) {
-			fdbg("Error %d reading from device\n", -ret);
-			return ret;
-		}
-
-		/* Modify the data. */
-
-		memcpy(&dev->bytebuffer[offset - startblock * dev->geo.blocksize], buffer, nbytes);
-
-		/* Write the data back to the device. */
-
-		ret = MTD_BWRITE(dev->mtd, startblock, nblocks, (FAR uint8_t *)dev->bytebuffer);
-		if (ret < 0) {
-			fdbg("Error %d writing to device\n", -ret);
-			return ret;
-		}
-		ret = nbytes;
+		ret = smart_byte_to_block_write(dev, offset, nbytes, buffer);
 	}
 
 	return ret;
@@ -1819,7 +1824,7 @@ static int smart_set_wear_level(FAR struct smart_struct_s *dev, uint16_t block, 
 static int smart_scan(FAR struct smart_struct_s *dev)
 {
 	int sector;
-	int ret;
+	int ret = OK;
 	uint16_t totalsectors;
 	uint16_t prerelease;
 	uint16_t logicalsector;
@@ -1829,6 +1834,7 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 	uint32_t offset;
 	uint16_t seq1;
 	uint16_t seq2;
+	uint16_t seqwrap;
 	struct smart_sect_header_s header;
 	bool status_released, status_committed;
 #ifdef CONFIG_MTD_SMART_MINIMIZE_RAM
@@ -2124,16 +2130,19 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 #if SMART_STATUS_VERSION == 1
 			if (header.status & SMART_STATUS_CRC) {
 				seq1 = header.seq;
+				seqwrap = 0xf0;
 			} else {
 				seq1 = (uint16_t)(((header.crc8 << 8) & 0xFF00) | header.seq);
+				seqwrap = 0xfff0;
 			}
 #else
 			seq1 = header.seq;
+			seqwrap = 0xf0;
 #endif
 
 			/* Now determine who wins. */
 
-			if ((seq1 > 0xFFF0 && seq2 < 10) || seq2 > seq1) {
+			if ((seq1 > seqwrap && seq2 < 10) || seq2 > seq1) {
 				/* Seq 2 is the winner ... bigger or it wrapped. */
 
 #ifndef CONFIG_MTD_SMART_MINIMIZE_RAM
@@ -3045,7 +3054,7 @@ static int smart_relocate_sector(FAR struct smart_struct_s *dev, uint16_t oldsec
 	offset = oldsector * dev->mtdBlksPerSector * dev->geo.blocksize + offsetof(struct smart_sect_header_s, status);
 	ret = smart_bytewrite(dev, offset, 1, &newstatus);
 	if (ret < 0) {
-		fdbg("Error %d releasing old sector %d\n" - ret, oldsector);
+		fdbg("Error %d releasing old sector %d\n", ret, oldsector);
 	}
 #ifndef CONFIG_MTD_SMART_ENABLE_CRC
 
@@ -4923,7 +4932,8 @@ ok_out:
  * Name: smart_journal_init
  *
  * Description:
- *   Initialize to journal structure & sector to recover previous transaction.
+ *   Initializes journal sequence to 0, scans existing journal entries for
+ *   recovery and retrieves latest sequence number.
  *
  ****************************************************************************/
 
@@ -4969,7 +4979,8 @@ static uint32_t smart_journal_get_writeaddress(FAR struct smart_struct_s *dev)
  *
  * Description:
  *   Increase journal sequence.
- *   If current erase block is filled with journal entries, erase it.
+ *   If current erase block is filled with journal entries, we automatically
+ *   move to the next block and erase the current.
  *
  ****************************************************************************/
 
@@ -4981,12 +4992,12 @@ static int smart_journal_move_to_next(FAR struct smart_struct_s *dev)
 	/* Increase sequence here, journal_seq is always less than total number of journal entries */
 	dev->journal_seq++;
 
-	/* Now it reaches end of last block, so move to first of first block */
+	/* If Journal Entries have reached the end of the last block, move to the starting of the first block */
 	if (dev->journal_seq == dev->njournalentries) {
 		dev->journal_seq = 0;
 	}
 
-	/* Check we have to move to next block, delete current block if it is full */
+	/* Check if we have to move to the next block, delete current block if it is full */
 	if (((old_seq + 1) % dev->njournalPerBlk) == 0) {
 		old_block = old_seq / dev->njournalPerBlk;
 		old_block += dev->neraseblocks;
@@ -5019,7 +5030,7 @@ static int smart_journal_release_sector(FAR struct smart_struct_s *dev, uint16_t
 	struct smart_sect_header_s header;
 	size_t offset;
 
-	offset = psector * dev->sectorsize;
+	offset = (off_t)psector * (off_t)dev->sectorsize;
 	ret = MTD_READ(dev->mtd, offset, sizeof(struct smart_sect_header_s), (FAR uint8_t *)&header);
 	if (ret != sizeof(struct smart_sect_header_s)) {
 		fdbg("Read header failed psector : %d offset : %d\n", psector, offset);
@@ -5034,15 +5045,18 @@ static int smart_journal_release_sector(FAR struct smart_struct_s *dev, uint16_t
 
 
 	offset += offsetof(struct smart_sect_header_s, status);
+#ifdef CONFIG_MTD_BYTE_WRITE
 	ret = MTD_WRITE(dev->mtd, offset, 1, &header.status);
+#else
+	ret = smart_byte_to_block_write(dev, offset, 1, &header.status);
+#endif
 	if (ret != 1) {
 		fdbg("Release sector Error ret : %d target sector : %d\n", ret, psector);
 		return -EIO;
 	}
 	
-	/* TODO Now verify release here but it just 1 byte, I guess fail never happened as per my experience...
-	 * If it never happened, remove below code.
-	 */
+	/* Verify that the sector is released */
+	/* TODO However, it is just a change of 1 byte, very unlikely to fail. If failure never happens, remove the code below */
 
 	ret = MTD_READ(dev->mtd, offset, 1, (FAR uint8_t *)&header.status);
 	if (ret != 1) {
@@ -5092,7 +5106,12 @@ static int smart_journal_checkin(FAR struct smart_struct_s *dev, journal_log_t *
 	smart_journal_print_log(dev, log);
 #endif
 	/* First write Journal log with Checkin state */
+
+#ifdef CONFIG_MTD_BYTE_WRITE
 	ret = MTD_WRITE(dev->mtd, address, log_size, (FAR uint8_t *)log);
+#else
+	ret = smart_byte_to_block_write(dev, address, log_size, (FAR uint8_t *)log);
+#endif
 	if (ret != log_size) {
 		fdbg("Checkin Error, write log data... physical address %u ret : %d\n", address, ret);
 		return -EIO;
@@ -5126,7 +5145,11 @@ static int smart_journal_checkout(FAR struct smart_struct_s *dev, journal_log_t 
 	int ret;
 
 	SET_JOURNAL_STATE(log->status, SMART_JOURNAL_STATE_CHECKOUT);
+#if CONFIG_MTD_BYTE_WRITE
 	ret = MTD_WRITE(dev->mtd, address + offsetof(journal_log_t, status), 1, (FAR uint8_t *)&log->status);
+#else
+	ret = smart_byte_to_block_write(dev, address + offsetof(journal_log_t, status), 1, (FAR uint8_t *)&log->status);
+#endif
 	if (ret != 1) {
 		fdbg("Checkout error, change log state to checkout.. ret : %d\n", ret);
 		smart_journal_print_log(dev, log);
@@ -5141,7 +5164,9 @@ static int smart_journal_checkout(FAR struct smart_struct_s *dev, journal_log_t 
  * Name: smart_journal_process_transaction
  *
  * Description:
- *   Check out journal entry, checkpoint to mtd header from journal data
+ *   Process the COMMIT/ERASE/RELEASE task via MTD driver onto flash memory
+ *   based on the type of log. In case of "TYPE_COMMIT", Proceed with reading
+ *   back and verifying written data with a CRC check.
  *
  ****************************************************************************/
 
@@ -5158,8 +5183,13 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 
 	case SMART_JOURNAL_TYPE_COMMIT: {
 
+#ifdef CONFIG_MTD_BYTE_WRITE
+		/** If board supports bytewrite, bytewrite is always faster than block write.
+		  * We already have a header in journal log, so write contents first, then write header
+		  */
+		  
 		/* Write given data in rwbuffer from users, except mtd header */
-		ret = MTD_WRITE(dev->mtd, psector * dev->sectorsize + mtd_size, dev->sectorsize - mtd_size, (FAR uint8_t *)&dev->rwbuffer[mtd_size]);
+		ret = MTD_WRITE(dev->mtd, ((off_t)psector * dev->sectorsize) + (off_t)mtd_size, dev->sectorsize - mtd_size, (FAR uint8_t *)&dev->rwbuffer[mtd_size]);
 		if (ret != dev->sectorsize - mtd_size) {
 			fdbg("write data failed ret : %d\n", ret);
 			return -EIO;
@@ -5171,6 +5201,11 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 			fdbg("Checkout error, write mtd header.. ret : %d\n", ret);
 			return -EIO;
 		}
+#else
+		/* If board doesn't support bytewrite, write entire of sector */
+		memcpy(&dev->rwbuffer[0], (FAR uint8_t *)&log->mtd_header, mtd_size);
+		ret = MTD_BWRITE(dev->mtd, psector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
+#endif
 
 		/* It is written entire sector, so validation check should be here */
 		ret = MTD_BREAD(dev->mtd, psector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
@@ -5193,7 +5228,7 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 	case SMART_JOURNAL_TYPE_ERASE: {
 		/* Instead of copy header from journal, Erase block(psector) */
 		ret = MTD_ERASE(dev->mtd, psector, 1);
-		if (ret != OK) {
+		if (ret < 0) {
 			fdbg("Erase failed ret : %d\n", ret);
 			return -EIO;
 		}
@@ -5220,7 +5255,7 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
  * Name: smart_journal_bwrite
  *
  * Description:
- *   Block Write function instead of MTD_BWRITE, return is size of written page.
+ *   Block Write function instead of MTD_BWRITE, returns size of written page.
  *   This will write journal entry first, then write requested data except
  *   mtd header, finally write header from journal entry.
  *
@@ -5286,10 +5321,10 @@ errout_with_journal:
  * Name: smart_journal_bytewrite
  *
  * Description:
- *   Byte Write function instead of smart_bytewrite, return is size of written bytes.
- *   It is called when smartfs release target sector only, it means no data.
- *   This will not write data on physical sector.
- *   Sequence is journal write -> write header
+ *   Byte Write function to be used instead of smart_bytewrite. It is called
+ *   when smartfs releases a sector. This function only writes 1 byte
+ *   to the physical sector(modifed header->status byte). Returns the number
+ *   of bytes written. Followed sequence is journal write -> write header
  *
  ****************************************************************************/
 
@@ -5475,9 +5510,10 @@ static void smart_journal_print_log(FAR struct smart_struct_s *dev, journal_log_
  * Name: smart_journal_scan
  *
  * Description:
- *   Scan Entire of journal blocks and set dev->journal_seq.
- *   Recovery which has checkin state, but not checkout state.
- *   And return sequence number to write next journal entry.
+ *   Scans all journal blocks and retrieves latest dev->journal_seq.
+ *   Recover transactions which have checkin state, but no checkout state.
+ *   Return last valid sequence number to write next journal entry.
+ *   If print_dump = True, extra informational logs will be printed.
  *
  ****************************************************************************/
 
@@ -5488,13 +5524,13 @@ static int smart_journal_scan(FAR struct smart_struct_s *dev, bool print_dump)
 	uint32_t last_recovery_seq = dev->njournalentries;
 	journal_log_t log;
 	if (print_dump) {
-		fdbg("Dump Start !!\n");
+		fdbg("Journal Scan Start !!\n");
 	}
 	dev->journal_seq = 0;
 	for (dev->journal_seq = 0; dev->journal_seq < dev->njournalentries; dev->journal_seq++) {
 		ret = smart_journal_read_journal_log(dev, &log);
 		if (ret < 0) {
-			fdbg("read failed! ret : %d journal_seq : %d\n", ret, dev->journal_seq);
+			fdbg("Reading Journal Entry Failed! ret : %d journal_seq : %d\n", ret, dev->journal_seq);
 			return -EIO;
 		}
 
@@ -5512,10 +5548,15 @@ static int smart_journal_scan(FAR struct smart_struct_s *dev, bool print_dump)
 				ret = smart_journal_recovery(dev, &log);
 				/* -EINVAL means journal log is not written properly, we skip it. */
 				if ((ret != OK) && (ret != -EINVAL)) {
-					fdbg("Recovery Failed : ret : %d\n", ret);
+					fdbg("Recovery from Journal Entry Failed : ret : %d\n", ret);
 					return ret;
 				}
-				last_recovery_seq = dev->journal_seq;
+				/* If it was valid journal, update last_recovery_seq. Otherwise, update last_checkout_seq to use next journal */
+				if (ret == OK) {
+					last_recovery_seq = dev->journal_seq;
+				} else {
+					last_checkout_seq = dev->journal_seq;
+				}
 			} else {
 				last_checkout_seq = dev->journal_seq;
 			}
@@ -5523,7 +5564,7 @@ static int smart_journal_scan(FAR struct smart_struct_s *dev, bool print_dump)
 	}
 	
 	if (print_dump) {
-		fdbg("end of journal last_recovery_seq : %d last_checkout_seq : %d\n\n", last_recovery_seq, last_checkout_seq);
+		fdbg("End of Journal Entries, last_recovery_seq : %d last_checkout_seq : %d\n\n", last_recovery_seq, last_checkout_seq);
 	}
 
 	/* Adjust sequence of journal. */ 
@@ -5545,7 +5586,7 @@ static int smart_journal_scan(FAR struct smart_struct_s *dev, bool print_dump)
  * Name: smart_journal_recovery
  *
  * Description:
- *   Recovery unchecked journal
+ *   Recovery of unchecked Journal Entries.
  *
  ****************************************************************************/
 
@@ -5559,39 +5600,44 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 	
 	fvdbg("recovery data journal_seq : %d!!\n", dev->journal_seq);
 
-	/* Before calculate journal, check the journal contents first */
+	/* Before calculating Journal CRC, check the journal contents first
+	   Validity of physical sector number associated with journal
+	 */
 	if (psector >= (dev->geo.neraseblocks * dev->sectorsPerBlk)) {
 		fdbg("invalid psector : %d\n", psector);
-		return -EINVAL;
+		goto error_with_checkin;
 	}
 
+	/* Verify that the sequence number stored in the log matches the sequence number from the loop in journal_scan */
 	if (UINT8TOUINT16(log->seq) != dev->journal_seq) {
 		fdbg("journal sequence is not match log->seq : %d dev->journal_seq : %d\n", UINT8TOUINT16(log->seq), dev->journal_seq);
-		return -EINVAL;
+		goto error_with_checkin;
 	}
 
+	/* Validate the type of the journal entry */
 	type = GET_JOURNAL_TYPE(log->status);
-
 	if ((type == 0) || (type > SMART_JOURNAL_TYPE_ERASE)) {
 		fdbg("invalid type : %d\n", type);
-		return -EINVAL;
+		goto error_with_checkin;
+
 	}
 	
-	/* Recovery step is Check crc -> Check something more based on type -> checkout -> verify based on type */
+	/* Recovery steps include: -
+	   1. Check CRC of Journal
+	   2. Subsequent check based on type of Journal Entry
+	   3. Checkout Journal Entry
+	   4. Verification based on type
+	 */
 	if (smart_validate_journal_crc(log) != OK) {
 		fdbg("Invalid CRC calculated crc : %d written crc : %d\n", smart_calc_journal_crc(log), UINT8TOUINT16(log->crc16));
 		/* Invalid one, so make it checkout */
-		ret = smart_journal_checkout(dev, log, address);
-		if (ret != OK) {
-			return ret;
-		}
-		return -EINVAL;
+		goto error_with_checkin;
 	}
 
 	fvdbg("address : %u\n", address);
 	
 	switch (type) {
-	/* Check committed data and redo if crc is valid, otherwise release it */
+	/* Check committed data and redo if CRC is valid, otherwise release it */
 	case SMART_JOURNAL_TYPE_COMMIT:
 		/* Read entire of sector First */
 		ret = MTD_BREAD(dev->mtd, psector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
@@ -5600,12 +5646,13 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 			return -EIO;
 		}
 
-		/* And then check validation of crc, if crc is matched, it means both of data & heade are valid,
-		 * so only checkout is necessary.. But Should we check written mtd header with journal log's ?
+		/* And then check validation of crc, if crc is matched, it means both of data & header are valid.
+		 * But Should we check written mtd header with journal log's?
 		 */
 		ret = smart_validate_crc(dev);
 		if (ret == OK) {
 			fvdbg("Entire of sector is valid, so checkout last journal!!!!\n");
+			/* Data in MTD header was successfully updated but Journal Entry was not checked out. Do it now */
 			ret = smart_journal_checkout(dev, log, address);
 			if (ret != OK) {
 				fdbg("Sector was valid but checkout failed\n");
@@ -5615,11 +5662,13 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 		}
 
 		fvdbg("Entire of sector is invalid, we will check data area\n");
-		/* Unfortunately, entire of sector is not valid...so we will check data's validation */
+		/* MTD sector could not be validated entirely, check only data part's validation (exclude metadata).
+		   Replace MTD header in buffer with metadata from log and recheck
+		 */
 		memcpy(dev->rwbuffer, &log->mtd_header, mtd_size);
 		ret = smart_validate_crc(dev);
-		/* If CRC is not same, data sector is invalid, so release data sector First */
 		if (ret != OK) {
+			/* If CRC still does not match, the data in the sector is not correct */
 			fdbg("Invalid data, release data sector & journal!\n");
 			ret = smart_journal_release_sector(dev, psector);
 			if (ret != OK) {
@@ -5627,9 +5676,13 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 				return -EIO;
 			}
 		} else {
-			/* If crc is same, then update mtd header */
+			/* If CRC matches, then update the MTD header with new metadata from log */
 			fvdbg("valid data, update header here..\n");
+#ifdef CONFIG_MTD_BYTE_WRITE
 			ret = MTD_WRITE(dev->mtd, psector * dev->sectorsize, mtd_size, (FAR uint8_t *)&log->mtd_header);
+#else
+			ret = smart_byte_to_block_write(dev, psector * dev->sectorsize, mtd_size, (FAR uint8_t *)&log->mtd_header);
+#endif
 			if (ret != mtd_size) {
 				fdbg("Checkout error, write mtd header.. ret : %d\n", ret);
 				return -EIO;
@@ -5664,11 +5717,19 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 		break;
 	}
 
+	/* If we are able to process a pending transaction successfully, checkout the corresponding Journal Entry */
 	ret = smart_journal_checkout(dev, log, address);
 	if (ret != OK) {
 		fdbg("checkout failed sector\n");
 	}	
 	return ret;
+	
+error_with_checkin:
+	ret = smart_journal_checkout(dev, log, address);
+	if (ret != OK) {
+		return ret;
+	}
+	return -EINVAL;
 }
 
 #endif
@@ -5842,7 +5903,7 @@ int smart_initialize(int minor, FAR struct mtd_dev_s *mtd, FAR const char *partn
 		}
 
 #ifdef CONFIG_MTD_SMART_JOURNALING
-		/* Now ready to init journal here */
+		/* Now ready to initialize journal here */
 		ret = smart_journal_init(dev);
 		if (ret < 0) {
 			fdbg("journal init failed ret : %d\n", ret);

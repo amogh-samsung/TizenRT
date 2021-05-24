@@ -255,8 +255,12 @@ EXTERN uint32_t g_dabtstackbase;	/* Initial top of data abort stack */
  *    of _data.  like:  uint32_t *pdata = &_sdata;
  */
 
-EXTERN uint32_t _stext;			/* Start of .text */
-EXTERN uint32_t _etext;			/* End_1 of .text + .rodata */
+EXTERN uint32_t _stext_flash;			/* Start of .text in Flash region */
+EXTERN uint32_t _etext_flash;			/* End_1 of .text + .rodata in Flash region */
+#ifdef CONFIG_ARCH_HAVE_RAM_KERNEL_TEXT
+EXTERN uint32_t _stext_ram;			/* Start of .text in RAM region */
+EXTERN uint32_t _etext_ram;			/* End of .text in RAM region */
+#endif
 EXTERN const uint32_t _eronly;	/* End+1 of read only section (.text + .rodata) */
 EXTERN uint32_t _sdata;			/* Start of .data */
 EXTERN uint32_t _edata;			/* End+1 of .data */
@@ -370,6 +374,8 @@ uint32_t *up_doirq(int irq, uint32_t *regs);
 
 int up_svcall(int irq, FAR void *context, FAR void *arg);
 int up_hardfault(int irq, FAR void *context, FAR void *arg);
+int up_busfault(int irq, FAR void *context, FAR void *arg);
+int up_usagefault(int irq, FAR void *context, FAR void *arg);
 
 #if defined(CONFIG_ARCH_CORTEXM3) || defined(CONFIG_ARCH_CORTEXM4) || defined(CONFIG_ARCH_CORTEXM7) || defined(CONFIG_ARCH_CORTEXM33)
 

@@ -158,7 +158,11 @@ static void stkmon_print_inactive_list(void)
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 			printf(" | %10d", terminated_infos[inactive_idx].chk_peakheap);
 #endif
-			printf(" | %7lld", (uint64_t)((clock_t)terminated_infos[inactive_idx].timestamp));
+#ifdef CONFIG_SYSTEM_TIME64
+			printf(" | %7llu", (uint64_t)terminated_infos[inactive_idx].timestamp);
+#else
+			printf(" | %7lu", (uint32_t)terminated_infos[inactive_idx].timestamp);
+#endif
 #if (CONFIG_TASK_NAME_SIZE > 0)
 			printf(" | %s", terminated_infos[inactive_idx].chk_name);
 #endif
@@ -169,7 +173,7 @@ static void stkmon_print_inactive_list(void)
 	free(terminated_infos);
 }
 
-static void stkmon_print_active_values(char *buf)
+static void stkmon_print_active_values(char *buf, void *arg)
 {
 	int i;
 	stat_data stat_info[PROC_STAT_MAX];
@@ -187,7 +191,11 @@ static void stkmon_print_active_values(char *buf)
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
 	printf(" | %10s", stat_info[PROC_STAT_PEAKHEAP]);
 #endif
-	printf(" | %7lld", (uint64_t)((clock_t)clock()));
+#ifdef CONFIG_SYSTEM_TIME64
+	printf(" | %7llu", (uint64_t)clock());
+#else
+	printf(" | %7lu", (uint32_t)clock());
+#endif
 #if (CONFIG_TASK_NAME_SIZE > 0)
 	printf(" | %s", stat_info[PROC_STAT_NAME]);
 #endif
@@ -201,7 +209,7 @@ static int stkmon_read_proc(FAR struct dirent *entryp, FAR void *arg)
 	char buf[STKMON_BUFLEN];
 
 	asprintf(&filepath, "%s/%s/%s", PROCFS_MOUNT_POINT, entryp->d_name, "stat");
-	ret = utils_readfile(filepath, buf, STKMON_BUFLEN, stkmon_print_active_values);
+	ret = utils_readfile(filepath, buf, STKMON_BUFLEN, stkmon_print_active_values, NULL);
 	if (ret < 0) {
 		printf("Failed to read %s\n", filepath);
 		free(filepath);
@@ -264,7 +272,7 @@ static void *stackmonitor_daemon(void *arg)
 		printf("|------------");
 #endif
 		printf("\n");
-		utils_proc_pid_foreach(stkmon_read_proc);
+		utils_proc_pid_foreach(stkmon_read_proc, NULL);
 #ifndef CONFIG_DISABLE_SIGNALS
 		sleep(CONFIG_STACKMONITOR_INTERVAL);
 	}
@@ -288,7 +296,7 @@ static void stackmonitor_stop(void)
 
 	if (stkmon_started) {
 		/* Stop the stack monitor.  The next time the monitor wakes up,
-		 * it will see the the stop indication and will exist.
+		 * it will see the stop indication and will exist.
 		 */
 		printf(STKMON_PREFIX "Stopping, not stopped yet\n");
 		stkmon_started = FALSE;

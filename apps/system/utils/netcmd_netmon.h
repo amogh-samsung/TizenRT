@@ -21,6 +21,7 @@
 
 #ifdef CONFIG_NET_NETMON
 int cmd_netmon(int argc, char **argv);
+int cmd_netstats(int argc, char **argv);
 #endif
 
 #endif

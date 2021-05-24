@@ -55,6 +55,7 @@
  ****************************************************************************/
 
 #include <tinyara/config.h>
+#include <tinyara/arch.h>
 
 #include <stdint.h>
 #include <string.h>
@@ -63,6 +64,11 @@
 
 #include <tinyara/userspace.h>
 #include <arch/irq.h>
+
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+#include <tinyara/reboot_reason.h>
+#include <arch/reboot_reason.h>
+#endif
 
 #include "up_arch.h"
 #include "nvic.h"
@@ -84,7 +90,7 @@
 
 #define INSN_SVC0        0xdf00	/* insn: svc 0 */
 
-#ifdef CONFIG_BINMGR_RECOVERY
+#ifdef CONFIG_APP_BINARY_SEPARATION
 uint32_t g_assertpc;
 #endif
 /****************************************************************************
@@ -118,7 +124,7 @@ int up_hardfault(int irq, FAR void *context, FAR void *arg)
 	uint32_t *regs = (uint32_t *)context;
 #endif
 
-#ifdef CONFIG_BINMGR_RECOVERY
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	g_assertpc = regs[REG_R15];
 #endif
 	/* Get the value of the program counter where the fault occurred */
@@ -133,17 +139,16 @@ int up_hardfault(int irq, FAR void *context, FAR void *arg)
 
 #ifdef CONFIG_BUILD_PROTECTED
 	/* In the kernel build, SVCalls are expected in either the base, kernel
-	 * FLASH region or in the user FLASH region.
+	 * FLASH region, kernel RAM region or in the user FLASH region.
 	 */
 
-	if (((uintptr_t)pc >= (uintptr_t)&_stext && (uintptr_t)pc < (uintptr_t)&_etext) ||
-			(sched_self()->uspace &&
+	if ((is_kernel_text_space((void *)pc)) || (sched_self()->uspace &&
 			 (uintptr_t)pc >= (uintptr_t)sched_self()->uspace->->us_textstart &&
 			 (uintptr_t)pc < (uintptr_t)sched_self()->uspace->us_textend))
 #else
-	/* SVCalls are expected only from the base, kernel FLASH region */
+	/* SVCalls are expected only from the base, kernel FLASH & RAM region */
 
-	if ((uintptr_t)pc >= (uintptr_t)&_stext && (uintptr_t)pc < (uintptr_t)&_etext)
+	if (is_kernel_text_space((void *)pc))
 #endif
 	{
 		/* Fetch the instruction that caused the Hard fault */
@@ -200,6 +205,9 @@ int up_hardfault(int irq, FAR void *context, FAR void *arg)
 
 	(void)irqsave();
 	lldbg("PANIC!!! Hard fault: %08x\n", getreg32(NVIC_HFAULTS));
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+	up_reboot_reason_write(REBOOT_SYSTEM_PREFETCHABORT);
+#endif
 	PANIC();
 	return OK;
 }

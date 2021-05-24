@@ -97,7 +97,7 @@
 #define svcdbg(...)
 #endif
 
-#ifdef CONFIG_BINMGR_RECOVERY
+#ifdef CONFIG_APP_BINARY_SEPARATION
 extern uint32_t g_assertpc;
 #endif
 #ifdef CONFIG_SUPPORT_COMMON_BINARY
@@ -194,7 +194,7 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
 	/* The SVCall software interrupt is called with R0 = system call command
 	 * and R1..R7 =  variable number of arguments depending on the system call.
 	 */
-#ifdef CONFIG_BINMGR_RECOVERY
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	g_assertpc = regs[REG_R14];
 #endif
 
@@ -270,13 +270,13 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
 #if (defined(CONFIG_ARMV7M_MPU) && defined(CONFIG_APP_BINARY_SEPARATION))
 		/* Condition check : Update MPU registers only if this is not a kernel thread. */
 		if ((tcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL) {
-			for (int i = 0; i < 3 * MPU_NUM_REGIONS; i += 3) {
+			for (int i = 0; i < MPU_REG_NUMBER * MPU_NUM_REGIONS; i += MPU_REG_NUMBER) {
 				up_mpu_set_register(&tcb->mpu_regs[i]);
 			}
-#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
-			up_mpu_set_register(tcb->stack_mpu_regs);
-#endif
 		}
+#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
+		up_mpu_set_register(tcb->stack_mpu_regs);
+#endif
 #endif
 
 #ifdef CONFIG_SUPPORT_COMMON_BINARY
@@ -322,13 +322,13 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
 #if (defined(CONFIG_ARMV7M_MPU) && defined(CONFIG_APP_BINARY_SEPARATION))
 		/* Condition check : Update MPU registers only if this is not a kernel thread. */
 		if ((tcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL) {
-			for (int i = 0; i < 3 * MPU_NUM_REGIONS; i += 3) {
+			for (int i = 0; i < MPU_REG_NUMBER * MPU_NUM_REGIONS; i += MPU_REG_NUMBER) {
 				up_mpu_set_register(&tcb->mpu_regs[i]);
 			}
-#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
-			up_mpu_set_register(tcb->stack_mpu_regs);
-#endif
 		}
+#ifdef CONFIG_MPU_STACK_OVERFLOW_PROTECTION
+		up_mpu_set_register(tcb->stack_mpu_regs);
+#endif
 #endif
 
 #ifdef CONFIG_SUPPORT_COMMON_BINARY

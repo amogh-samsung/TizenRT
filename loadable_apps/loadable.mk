@@ -26,17 +26,8 @@ USERSPACE = $(TOPDIR)/userspace/up_userspace
 LDELFFLAGS += -Bstatic
 LDLIBPATH += -L $(TINYARALIB)
 
-ifeq ($(CONFIG_SUPPORT_COMMON_BINARY),y)
-# If we support common binary, then we exclude some of the libraries from here
-LDLIBS := $(patsubst %-luarch,%,$(LDLIBS))
-LDLIBS := $(patsubst %-luc,%,$(LDLIBS))
-LDLIBS := $(patsubst %-lumm,%,$(LDLIBS))
-LDLIBS := $(patsubst %-lproxies,%,$(LDLIBS))
-else
-
 LIBGCC = "${shell "$(CC)" $(ARCHCPUFLAGS) -print-libgcc-file-name}"
 LDLIBS += $(LIBGCC)
-endif
 
 OBJCOPY = $(CROSSDEV)objcopy
 
@@ -67,9 +58,11 @@ $(OBJS): %$(OBJEXT): %.c
 
 $(BIN): $(OBJS)
 	@echo "LD: $<"
-	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $@ $(ARCHCRT0OBJ) $^ --start-group $(LDLIBS) --end-group
 ifeq ($(CONFIG_SUPPORT_COMMON_BINARY),y)
+	$(Q) $(LD) $(LDELFFLAGS) -o $@ $(ARCHCRT0OBJ) $^ --start-group $(LIBGCC) --end-group
 	$(Q) $(NM) -u $(BIN) | awk -F"U " '{print "--require-defined "$$2}' >> $(USER_BIN_DIR)/lib_symbols.txt
+else
+	$(Q) $(LD) $(LDELFFLAGS) $(LDLIBPATH) -o $@ $(ARCHCRT0OBJ) $^ --start-group $(LDLIBS) --end-group
 endif
 
 clean:
@@ -88,7 +81,7 @@ ifeq ($(CONFIG_ELF_EXCLUDE_SYMBOLS),y)
 	$(Q) $(OBJCOPY) --remove-section .comment $(USER_BIN_DIR)/$(BIN)
 	$(Q) $(STRIP) -g $(USER_BIN_DIR)/$(BIN) -o $(USER_BIN_DIR)/$(BIN)
 endif
-	$(Q) $(TOPDIR)/tools/mkbinheader.py $(USER_BIN_DIR)/$(BIN) $(BIN_TYPE) $(KERNEL_VER) $(BIN) $(BIN_VER) $(DYNAMIC_RAM_SIZE) $(STACKSIZE) $(PRIORITY) $(COMPRESSION_TYPE) $(BLOCK_SIZE) $(LOADING_PRIORITY)
+	$(Q) $(TOPDIR)/tools/mkbinheader.py $(USER_BIN_DIR)/$(BIN) user $(BIN_TYPE) $(KERNEL_VER) $(BIN) $(BIN_VER) $(DYNAMIC_RAM_SIZE) $(STACKSIZE) $(PRIORITY) $(COMPRESSION_TYPE) $(BLOCK_SIZE) $(LOADING_PRIORITY)
 	$(Q) $(TOPDIR)/tools/mkchecksum.py $(USER_BIN_DIR)/$(BIN)
 	$(Q) mkdir -p $(TOPDIR)/../tools/fs/contents-smartfs/$(BOARDNAME)/base-files/bins
 	$(Q) cp $(USER_BIN_DIR)/$(BIN) $(TOPDIR)/../tools/fs/contents-smartfs/$(BOARDNAME)/base-files/bins/$(BIN)_$(BIN_VER)

@@ -57,7 +57,13 @@
 #include <tinyara/config.h>
 
 #include <debug.h>
-
+#ifdef CONFIG_MM_ASSERT_ON_FAIL
+#include <assert.h>
+#ifdef CONFIG_SYSTEM_REBOOT_REASON
+#include <sys/prctl.h>
+#include <tinyara/reboot_reason.h>
+#endif
+#endif
 #include <tinyara/mm/mm.h>
 
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
@@ -257,9 +263,9 @@ FAR void *mm_memalign(FAR struct mm_heap_s *heap, size_t alignment, size_t size)
 		}
 
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
-                heapinfo_update_node((struct mm_allocnode_s *)node, caller_retaddr);
-                heapinfo_add_size(heap, ((struct mm_allocnode_s *)node)->pid, node->size);
-                heapinfo_update_total_size(heap, node->size, ((struct mm_allocnode_s *)node)->pid);
+		heapinfo_update_node((struct mm_allocnode_s *)node, caller_retaddr);
+		heapinfo_add_size(heap, ((struct mm_allocnode_s *)node)->pid, node->size);
+		heapinfo_update_total_size(heap, node->size, ((struct mm_allocnode_s *)node)->pid);
 #endif
 
 		ret = (void *)alignchunk;
@@ -271,16 +277,21 @@ FAR void *mm_memalign(FAR struct mm_heap_s *heap, size_t alignment, size_t size)
 	 * to the SYSLOG.
 	 */
 
-#ifdef CONFIG_DEBUG_MM
 	if (!ret) {
+#if defined(CONFIG_MM_ASSERT_ON_FAIL) && defined(CONFIG_SYSTEM_REBOOT_REASON)
+		prctl(PR_REBOOT_REASON_WRITE, REBOOT_SYSTEM_MEMORYALLOCFAIL);
+#endif
 		mdbg("Allocation failed, size %u\n", size);
 #ifdef CONFIG_DEBUG_MM_HEAPINFO
-		heapinfo_parse(heap, HEAPINFO_DETAIL_ALL, HEAPINFO_PID_ALL);
+		heapinfo_parse_heap(heap, HEAPINFO_DETAIL_ALL, HEAPINFO_PID_ALL);
+#endif
+
+#ifdef CONFIG_MM_ASSERT_ON_FAIL
+		PANIC();
 #endif
 	} else {
 		mvdbg("Allocated %p, size %u\n", ret, size);
 	}
-#endif
 
 	return ret;
 }

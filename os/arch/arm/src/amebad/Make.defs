@@ -60,12 +60,16 @@ CMN_ASRCS += up_fetchadd.S vfork.S
 CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c up_coherent_dcache.c
 CMN_CSRCS += up_createstack.c up_mdelay.c up_udelay.c up_exit.c
 CMN_CSRCS += up_puts.c up_initialize.c up_initialstate.c up_interruptcontext.c
-CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
+CMN_CSRCS += up_memfault.c up_busfault.c up_usagefault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
 CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
 CMN_CSRCS += up_unblocktask.c up_usestack.c up_doirq.c up_hardfault.c
 CMN_CSRCS += up_svcall.c up_vfork.c up_trigger_irq.c up_systemreset.c
 CMN_CSRCS += up_unblocktask_withoutsavereg.c
+
+ifeq ($(CONFIG_SYSTEM_REBOOT_REASON),y)
+CMN_CSRCS += up_reboot_reason.c
+endif
 
 ifeq ($(CONFIG_STACK_COLORATION),y)
 CMN_CSRCS += go_os_start.c
@@ -89,7 +93,7 @@ CMN_CSRCS += up_ramvec_initialize.c up_ramvec_attach.c
 endif
 
 ifeq ($(CONFIG_ARMV8M_TRUSTZONE),y)
-CMN_ASRCS += up_secure_context.S up_exception_svc.S
+CMN_ASRCS += up_secure_context.S 
 endif
 
 ifeq ($(CONFIG_BUILD_PROTECTED),y)
@@ -161,11 +165,31 @@ CHIP_CSRCS += amebad_serial.c
 CHIP_CSRCS += amebad_lowerhalf.c
 CHIP_CSRCS += amebad_enet.c
 CHIP_CSRCS += amebad_timer_lowerhalf.c
+CHIP_CSRCS += amebad_rtc_lowerhalf.c
+CHIP_CSRCS += amebad_rtc.c
 CHIP_CSRCS += amebad_watchdog_lowerhalf.c
+ifeq ($(CONFIG_BOARDCTL_RESET),y)
+CHIP_CSRCS += amebad_systemreset.c
+endif
+ifeq ($(CONFIG_SYSTEM_REBOOT_REASON),y)
+CHIP_CSRCS += amebad_reboot_reason.c
+endif
+
+ifeq ($(CONFIG_AMEBAD_BLE),y)
+ifeq ($(CONFIG_ARCH_FPU),y)
+EXTRA_LIBS += ${TOPDIR}/board/rtl8721csm/src/libs/lib_btgap_fpu.a
+else
+EXTRA_LIBS += ${TOPDIR}/board/rtl8721csm/src/libs/lib_btgap.a
+endif
+endif
 
 ifeq ($(CONFIG_AMEBAD_TRUSTZONE),y)
 CHIP_CSRCS += amebad_nsc.c
 
 # trustzone library
+ifeq ($(CONFIG_ARCH_FPU),y)
+EXTRA_LIBS += ${TOPDIR}/board/rtl8721csm/src/libs/cmse_implib_fpu.a
+else
 EXTRA_LIBS += ${TOPDIR}/board/rtl8721csm/src/libs/cmse_implib.a
+endif
 endif

@@ -13,6 +13,7 @@ choice
 config ARCH_CHIP_RTL8721CSM
 	bool "RTL8721CSM"
 	select ARCH_CORTEXM33
+	select ARCH_HAVE_FPU
 	select AMEBAD_WIFI
 	select ARMV8M_HAVE_ICACHE
 	select ARMV8M_HAVE_DCACHE
@@ -60,6 +61,36 @@ config AMEBAD_WIFI
 
 endmenu
 
+menu "Realtek RTL8721D BLE Support"
+
+config AMEBAD_BLE
+	bool "Enable Amebad BLE"
+	default n
+	select FTL_ENABLED
+
+if AMEBAD_BLE
+config FTL_ENABLED
+	bool "Enable FTL"
+	default n
+
+config AMEBAD_BLE_PERIPHERAL
+	bool "Enable Amebad BLE Peripheral"
+	default n
+
+config AMEBAD_BLE_CENTRAL
+	bool "Enable Amebad BLE Central"
+	default n
+
+if AMEBAD_BLE_CENTRAL && AMEBAD_BLE_PERIPHERAL
+	config AMEBAD_BLE_SCATTERNET
+		bool "Enable Amebad BLE Scatternet"
+		default n
+endif
+
+endif
+
+endmenu
+
 menu "Realtek RTL8721D TrustZone Support"
 
 config AMEBAD_TRUSTZONE
@@ -80,7 +111,7 @@ config AMEBAD_RDP
 
 config AMEBAD_RDP_KEY
 	hex "Amebad RDP Key"
-	default 2473040ab47c48655a15aa431c4bbb8a
+	default 0x2473040ab47c48655a15aa431c4bbb8a
 	range 00000000000000000000000000000000 ffffffffffffffffffffffffffffffff
 	depends on AMEBAD_RDP
 

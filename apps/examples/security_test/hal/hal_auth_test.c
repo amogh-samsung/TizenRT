@@ -377,17 +377,17 @@ TEST_SETUP(dh_generate_param)
 	ST_START_TEST;
 
 	g_dh_data.mode = HAL_DH_1024;
-	g_dh_data.G = (hal_data *)malloc(sizeof(hal_data));
+	g_dh_data.G = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, g_dh_data.G);
 	g_dh_data.G->data = g_buf_1024;
 	g_dh_data.G->data_len = sizeof(g_buf_1024);
 
-	g_dh_data.P = (hal_data *)malloc(sizeof(hal_data));
+	g_dh_data.P = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, g_dh_data.P);
 	g_dh_data.P->data = p_buf_1024;
 	g_dh_data.P->data_len = sizeof(p_buf_1024);
 
-	g_dh_data.pubkey = (hal_data *)malloc(sizeof(hal_data));
+	g_dh_data.pubkey = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, g_dh_data.pubkey);
 	ST_EXPECT_EQ(0, hal_test_malloc_buffer(g_dh_data.pubkey, HAL_AUTH_TEST_MEM_SIZE));
 
@@ -426,17 +426,17 @@ TEST_SETUP(dh_compute_shared_secret)
 
 	g_dh_data.mode = HAL_DH_1024;
 
-	g_dh_data.G = (hal_data *)malloc(sizeof(hal_data));
+	g_dh_data.G = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, g_dh_data.G);
 	g_dh_data.G->data = g_buf_1024;
 	g_dh_data.G->data_len = sizeof(g_buf_1024);
 
-	g_dh_data.P = (hal_data *)malloc(sizeof(hal_data));
+	g_dh_data.P = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, g_dh_data.P);
 	g_dh_data.P->data = p_buf_1024;
 	g_dh_data.P->data_len = sizeof(p_buf_1024);
 
-	g_dh_data.pubkey = (hal_data *)malloc(sizeof(hal_data));
+	g_dh_data.pubkey = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, g_dh_data.pubkey);
 	ST_EXPECT_EQ(0, hal_test_malloc_buffer(g_dh_data.pubkey, HAL_AUTH_TEST_MEM_SIZE));
 
@@ -498,13 +498,13 @@ TEST_SETUP(ecdh_compute_shared_secret)
 	ST_EXPECT_EQ2(HAL_SUCCESS, HAL_NOT_SUPPORTED, g_se->ops->get_key(HAL_KEY_ECC_SEC_P256R1, HAL_TEST_ECDH_KEY_SLOT_A, &key_a));
 	ST_EXPECT_EQ2(HAL_SUCCESS, HAL_NOT_SUPPORTED, g_se->ops->get_key(HAL_KEY_ECC_SEC_P256R1, HAL_TEST_ECDH_KEY_SLOT_B, &key_b));
 
-	ecdh_a.pubkey_x = (hal_data *)malloc(sizeof(hal_data));
+	ecdh_a.pubkey_x = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, ecdh_a.pubkey_x);
-	ecdh_a.pubkey_y = (hal_data *)malloc(sizeof(hal_data));
+	ecdh_a.pubkey_y = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, ecdh_a.pubkey_y);
-	ecdh_b.pubkey_x = (hal_data *)malloc(sizeof(hal_data));
+	ecdh_b.pubkey_x = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, ecdh_b.pubkey_x);
-	ecdh_b.pubkey_y = (hal_data *)malloc(sizeof(hal_data));
+	ecdh_b.pubkey_y = (hal_data *)zalloc(sizeof(hal_data));
 	ST_EXPECT_NEQ(NULL, ecdh_b.pubkey_y);
 
 	//data: pubkey_x, priv: pubkey_y
@@ -739,27 +739,27 @@ TEST_F(get_factory)
 	ST_END_TEST;
 }
 
-ST_SET_SMOKE_TAIL(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Generate_random", generate_random);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get hash", get_hash, generate_random);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get hmac", get_hmac, get_hash);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "RSA signature", rsa_sign, get_hmac);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "RSA verification", rsa_verify, rsa_sign);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "ECDSA signature", ecdsa_sign, rsa_verify);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "ECDSA verification", ecdsa_verify, ecdsa_sign);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Generate DH parameters", dh_generate_param, ecdsa_verify);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Compute DH shared secret", dh_compute_shared_secret, dh_generate_param);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Compute ECDH shared secret", ecdh_compute_shared_secret, dh_compute_shared_secret);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Set certificate", set_certificate, ecdh_compute_shared_secret);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get certificate", get_certificate, set_certificate);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Remove certificate", remove_certificate, get_certificate);
-ST_SET_SMOKE(HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get factory key/cert/data", get_factory, remove_certificate);
-ST_SET_PACK(hal_auth, get_factory);
-
-
 
 pthread_addr_t hal_auth_test(void)
 {
 	g_se = se_get_device();
+
+	ST_SET_PACK(hal_auth);
+
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Generate_random", generate_random);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get hash", get_hash);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get hmac", get_hmac);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "RSA signature", rsa_sign);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "RSA verification", rsa_verify);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "ECDSA signature", ecdsa_sign);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "ECDSA verification", ecdsa_verify);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Generate DH parameters", dh_generate_param);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Compute DH shared secret", dh_compute_shared_secret);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Compute ECDH shared secret", ecdh_compute_shared_secret);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Set certificate", set_certificate);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get certificate", get_certificate);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Remove certificate", remove_certificate);
+	ST_SET_SMOKE(hal_auth, HAL_AUTH_TEST_TRIAL, HAL_AUTH_TEST_LIMIT_TIME, "Get factory key/cert/data", get_factory);
 
 	ST_RUN_TEST(hal_auth);
 	ST_RESULT_TEST(hal_auth);

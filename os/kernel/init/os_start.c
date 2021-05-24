@@ -72,16 +72,23 @@
 #include  <tinyara/kmalloc.h>
 #include  <tinyara/init.h>
 #include  <tinyara/pm/pm.h>
+#include  <tinyara/mm/heap_regioninfo.h>
+#ifdef CONFIG_DEBUG_SYSTEM
+#include  <tinyara/debug/sysdbg.h>
+#endif
+#ifdef CONFIG_DRIVERS_OS_API_TEST
+#include  <tinyara/os_api_test_drv.h>
+#endif
 
 #include  "sched/sched.h"
 #include  "signal/signal.h"
 #include  "wdog/wdog.h"
 #include  "semaphore/semaphore.h"
 #ifndef CONFIG_DISABLE_MQUEUE
-#include "mqueue/mqueue.h"
+#include  "mqueue/mqueue.h"
 #endif
 #ifndef CONFIG_DISABLE_PTHREAD
-#include "pthread/pthread.h"
+#include  "pthread/pthread.h"
 #endif
 #include  "clock/clock.h"
 #include  "timer/timer.h"
@@ -90,16 +97,9 @@
 #include  "group/group.h"
 #endif
 #include  "init/init.h"
-#ifdef CONFIG_DEBUG_SYSTEM
-#include <tinyara/debug/sysdbg.h>
-#endif
-#ifdef CONFIG_TESTCASE_DRV
-#include <tinyara/testcase_drv.h>
-#endif
 #include  "debug/memdbg.h"
 
 extern const uint32_t g_idle_topstack;
-#include <tinyara/mm/heap_regioninfo.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -365,9 +365,12 @@ void os_start(void)
 	g_idletcb.argv = g_idleargv;
 
 	/* Fill the stack information to Idle task's tcb */
+
 	g_idletcb.cmn.adj_stack_size = CONFIG_IDLETHREAD_STACKSIZE;
 	g_idletcb.cmn.stack_alloc_ptr = (void *)(g_idle_topstack - CONFIG_IDLETHREAD_STACKSIZE);
 	g_idletcb.cmn.adj_stack_ptr = (void *)(g_idle_topstack - 4);
+
+	DEBUGASSERT(up_getsp() >= (uint32_t)g_idletcb.cmn.stack_alloc_ptr && up_getsp() <= (uint32_t)g_idletcb.cmn.adj_stack_ptr);
 
 	/* Then add the idle task's TCB to the head of the ready to run list */
 
@@ -398,7 +401,10 @@ void os_start(void)
 		 */
 
 		up_allocate_kheap(&heap_start, &heap_size);
-		kmm_initialize(heap_start, heap_size);
+		if (kmm_initialize(heap_start, heap_size) != OK) {
+			sdbg("ERROR : heap initialization is failed. heap_start : %x, heap_size : %u\n", heap_start, heap_size);
+			PANIC();
+		}
 #endif
 
 #ifdef CONFIG_MM_PGALLOC
@@ -529,8 +535,8 @@ void os_start(void)
 
 	fs_auto_mount();
 
-#ifdef CONFIG_TESTCASE_DRV
-	testcase_drv_register();
+#ifdef CONFIG_DRIVERS_OS_API_TEST
+	os_api_test_drv_register();
 #endif
 
 #if defined(CONFIG_DEBUG_SYSTEM)
@@ -594,7 +600,9 @@ void os_start(void)
 	pm_stay(PM_IDLE_DOMAIN, PM_NORMAL);
 #endif
 
+#ifdef CONFIG_DEBUG_MM_WARN
 	display_memory_information();
+#endif
 
 	DEBUGVERIFY(os_bringup());
 

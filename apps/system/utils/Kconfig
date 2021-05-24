@@ -67,7 +67,7 @@ config CPULOADMONITOR_PRIORITY
 	int "CPU load monitor daemon priority"
 	default 100
 	---help---
-		The priority to use the the CPU load monitor daemon.  Default: 100
+		The priority to use the CPU load monitor daemon.  Default: 100
 
 config CPULOADMONITOR_INTERVAL
 	int "CPU load monitor frequency"
@@ -113,6 +113,7 @@ endif #!DISABLE_ENVIRON
 config ENABLE_FREE
 	bool "free"
 	default y
+	select MMINFO if BUILD_PROTECTED
 	---help---
 		Show information about memory status
 
@@ -120,6 +121,7 @@ config ENABLE_HEAPINFO
 	bool "heapinfo"
 	default y
 	depends on DEBUG_MM_HEAPINFO && FS_PROCFS
+	select MMINFO
 	---help---
 		Show information about memory status per thread
 
@@ -148,8 +150,8 @@ config ENABLE_TZSELECT
 config ENABLE_IRQINFO
 	bool "irqinfo"
 	default n
-	depends on TASH && !FS_PROCFS_EXCLUDE_IRQS
-	select DEBUG_IRQ_INFO if DEBUG
+	depends on !FS_PROCFS_EXCLUDE_IRQS
+	depends on DEBUG_IRQ_INFO
 	---help---
 		List the registered interrupts, it's occurrence counts and corresponding isr.
 
@@ -165,7 +167,7 @@ config ENABLE_KILL
 config ENABLE_KILLALL
 	bool "killall"
 	default y
-	depends on !BUILD_PROTECTED
+	depends on FS_PROCFS && !FS_PROCFS_EXCLUDE_PROCESS
 	---help---
 		Send a signal to all processes running any of the specified commands
 
@@ -198,7 +200,7 @@ config STACKMONITOR_PRIORITY
 	int "Stack monitor daemon priority"
 	default 100
 	---help---
-		The priority to use the the stack monitor daemon.  Default: 100
+		The priority to use the stack monitor daemon.  Default: 100
 
 config STACKMONITOR_INTERVAL
 	int "Stack monitor dump frequency"

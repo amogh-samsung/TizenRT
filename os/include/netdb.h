@@ -136,6 +136,7 @@ typedef enum {
 	DHCPDSTART,
 	DHCPDSTOP,
 	DHCPDSTATUS,
+	GETNETSTATS,
 } req_type;
 
 /* To send a request to lwip stack by ioctl() use */
@@ -154,8 +155,8 @@ struct req_lwip_data {
 	size_t host_len;
 	size_t serv_len;
 	int flags;
-	u8_t num_dns;
-	ip_addr_t *dns_server;
+	int index;
+	struct sockaddr *addr;
 };
 
 #endif

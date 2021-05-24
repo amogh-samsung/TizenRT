@@ -167,7 +167,7 @@ struct sector_entry_queue_s {
 struct sector_recover_info_s {
 	uint16_t totalsector;
 	uint16_t isolatedsector;
-	uint16_t cleanentries;
+	uint16_t cleanedentries;
 };
 
 /****************************************************************************
@@ -588,7 +588,7 @@ off_t smartfs_seek_internal(struct smartfs_mountpt_s *fs, struct smartfs_ofile_s
 	 */
 
 	sectorstartpos = sf->filepos - (sf->curroffset - sizeof(struct smartfs_chain_header_s));
-	if (newpos >= sectorstartpos && newpos < sectorstartpos + fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s)) {
+	if ((newpos >= sectorstartpos) && (newpos < sectorstartpos + SMARTFS_AVAIL_DATABYTES(fs))) {
 		/* Seeking within the current sector.  Just update the offset */
 
 		sf->curroffset = sizeof(struct smartfs_chain_header_s) + newpos - sectorstartpos;
@@ -610,7 +610,7 @@ off_t smartfs_seek_internal(struct smartfs_mountpt_s *fs, struct smartfs_ofile_s
 	}
 
 	header = (struct smartfs_chain_header_s *)fs->fs_rwbuffer;
-	while ((sf->currsector != SMARTFS_ERASEDSTATE_16BIT) && (sf->filepos + fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s) < newpos)) {
+	while ((sf->currsector != SMARTFS_ERASEDSTATE_16BIT) && (sf->filepos + SMARTFS_AVAIL_DATABYTES(fs) < newpos)) {
 		/* Read the sector's header */
 
 		smartfs_setbuffer(&readwrite, sf->currsector, 0, sizeof(struct smartfs_chain_header_s), (uint8_t *)fs->fs_rwbuffer);
@@ -621,9 +621,9 @@ off_t smartfs_seek_internal(struct smartfs_mountpt_s *fs, struct smartfs_ofile_s
 		}
 #ifdef CONFIG_SMARTFS_DYNAMIC_HEADER
 		if (SMARTFS_NEXTSECTOR(header) == SMARTFS_ERASEDSTATE_16BIT) {
-			sf->filepos += (sf->entry.datalen - (sector_used * (fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s))));
+			sf->filepos += (sf->entry.datalen - (sector_used * SMARTFS_AVAIL_DATABYTES(fs)));
 		} else {
-			sf->filepos += (fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s));
+			sf->filepos += SMARTFS_AVAIL_DATABYTES(fs);
 		}
 		sector_used++;
 #else
@@ -685,14 +685,19 @@ int smartfs_sync_internal(struct smartfs_mountpt_s *fs, struct smartfs_ofile_s *
 		if (used_value == 0) {
 			set_used_byte_count((uint8_t *)header->used, sf->byteswritten);
 #else
-		if (header->used[0] == CONFIG_SMARTFS_ERASEDSTATE) {
-			*((uint16_t *)header->used) = sf->byteswritten;
+		if (SMARTFS_USED(header) == SMARTFS_ERASEDSTATE_16BIT) {
+			header->used[0] = (uint8_t)(sf->byteswritten & 0x00FF);
+			header->used[1] = (uint8_t)(sf->byteswritten >> 8);
+
 #endif
 		} else {
 #ifdef CONFIG_SMARTFS_DYNAMIC_HEADER
 			set_used_byte_count((uint8_t *)header->used, used_value + sf->byteswritten);
 #else
-			*((uint16_t *)header->used) += sf->byteswritten;
+			uint16_t tmp = SMARTFS_USED(header);
+			tmp += sf->byteswritten;
+			header->used[0] = (uint8_t)(tmp & 0x00FF);
+			header->used[1] = (uint8_t)(tmp >> 8);
 #endif
 		}
 
@@ -706,15 +711,6 @@ int smartfs_sync_internal(struct smartfs_mountpt_s *fs, struct smartfs_ofile_s *
 		}
 
 		sf->byteswritten = 0;
-		/* File's data sector has been synced with MTD, now check if this is a new file entry and write the entry */
-		if (sf->bflags & SMARTFS_BFLAG_NEW_ENTRY) {
-			/* Flags for this entry have already been set and stored, so mode will not be used */
-			ret = smartfs_writeentry(fs, sf->entry, SMARTFS_DIRENT_TYPE_FILE, (sf->entry.flags & SMARTFS_DIRENT_MODE));
-			if (ret < 0) {
-				fdbg("Failed to write new file entry ot MTD\n");
-				goto errout;
-			}
-		}
 		sf->bflags = SMARTFS_BFLAG_UNMOD;
 	}
 #else							/* CONFIG_SMARTFS_USE_SECTOR_BUFFER */
@@ -735,9 +731,9 @@ int smartfs_sync_internal(struct smartfs_mountpt_s *fs, struct smartfs_ofile_s *
 			goto errout;
 		}
 #ifdef CONFIG_SMARTFS_DYNAMIC_HEADER
-		used_value = sf->entry.datalen % (fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s));
+		used_value = sf->entry.datalen % SMARTFS_AVAIL_DATABYTES(fs);
 		if (sf->entry.datalen > 0 && used_value == 0) {
-			used_value = fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s);
+			used_value = SMARTFS_AVAIL_DATABYTES(fs);
 		}
 		set_used_byte_count((uint8_t *)header->used, used_value);
 #else
@@ -1258,7 +1254,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs, struct smartfs_entry_s *d
 										used_value = get_leftover_used_byte_count((uint8_t *)readwrite.buffer, get_used_byte_count((uint8_t *)header->used));
 										direntry->datalen += used_value;
 									} else {
-										direntry->datalen += (fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s));
+										direntry->datalen += SMARTFS_AVAIL_DATABYTES(fs);
 									}
 									readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
 #else
@@ -2053,7 +2049,7 @@ int smartfs_extendfile(FAR struct smartfs_mountpt_s *fs, FAR struct smartfs_ofil
 
 	smartfs_seek_internal(fs, sf, 0, SEEK_END);
 	length -= sf->entry.datalen;
-	data_len = fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s);
+	data_len = SMARTFS_AVAIL_DATABYTES(fs);
 	buf = (char *)kmm_malloc(data_len);
 	if (!buf) {
 		fdbg("Error allocating space for buffer\n");
@@ -2081,7 +2077,7 @@ int smartfs_extendfile(FAR struct smartfs_mountpt_s *fs, FAR struct smartfs_ofil
 	ret = OK;
 
 error_with_buf:
-	free(buf);
+	kmm_free(buf);
 	return ret;
 }
 
@@ -2233,6 +2229,7 @@ struct smartfs_mountpt_s *smartfs_get_first_mount(void)
 {
 	return g_mounthead;
 }
+#endif
 
 /****************************************************************************
  * Name: smartfs_invalidate_old_entry
@@ -2269,19 +2266,19 @@ int smartfs_invalidate_old_entry(struct smartfs_mountpt_s *fs, uint16_t logsecto
 
 	/* OK, we found 2 parents, now release old one, that is probably source path of rename */
 	if (count == 2) {
-		fvdbg("firstparent logsector : %d parentsector : %d parentoffset : %d time : %d\n", firstparent->logsector,\
+		fdbg("firstparent logsector : %d parentsector : %d parentoffset : %d time : %d\n", firstparent->logsector,\
 			firstparent->parentsector, firstparent->parentoffset, firstparent->time);
-		fvdbg("secondparent logsector : %d parentsector : %d parentoffset : %d time : %d\n", secondparent->logsector,\
+		fdbg("secondparent logsector : %d parentsector : %d parentoffset : %d time : %d\n", secondparent->logsector,\
 			secondparent->parentsector, secondparent->parentoffset, secondparent->time);
 		if (firstparent->time > secondparent->time) {
 			ret = smartfs_invalidateentry(fs, secondparent->parentsector, secondparent->parentoffset);
 			if (ret == OK) {
-				info->cleanentries++;
+				info->cleanedentries++;
 			}
 		} else {
 			ret = smartfs_invalidateentry(fs, firstparent->parentsector, firstparent->parentoffset); 
 			if (ret == OK) {
-				info->cleanentries++;
+				info->cleanedentries++;
 			}
 		}
 	}
@@ -2427,7 +2424,7 @@ int smartfs_scan_entry(struct smartfs_mountpt_s *fs, char *map, struct sector_re
 							fdbg("Unable to mark entry inactive at sector %d, ret : %d\n", logsector, ret);
 							goto errout;
 						}
-						info->cleanentries++;
+						info->cleanedentries++;
 
 					} else {
 						/* Make New node of Entry's first sector and put it to queue */
@@ -2473,7 +2470,7 @@ int smartfs_scan_entry(struct smartfs_mountpt_s *fs, char *map, struct sector_re
 						goto errout;
 					}
 					
-					info->cleanentries++;
+					info->cleanedentries++;
 					break;
 				}
 			}
@@ -2488,7 +2485,7 @@ errout:
 	while (!sq_empty(&entry_queue)) {
 		node = (struct sector_entry_queue_s *)sq_remfirst(&entry_queue);
 		if (node) {
-			fdbg("free node's sector : %d\n", node->logsector);
+			fvdbg("free node's sector : %d\n", node->logsector);
 			kmm_free(node);
 		}
 	}
@@ -2509,7 +2506,7 @@ int smartfs_sector_recovery(struct smartfs_mountpt_s *fs)
 	int ret;
 	long sector;
 	struct sector_recover_info_s info = {0,};
-	size_t size = (fs->fs_llformat.nsectors >> 3) + 1;
+	size_t size = (size_t)(fs->fs_llformat.nsectors >> 3) + 1;
 	
 	/* Alloc Logical Map */
 	char *map = (char *)kmm_malloc(sizeof(uint8_t *) * size);
@@ -2564,7 +2561,7 @@ int smartfs_sector_recovery(struct smartfs_mountpt_s *fs)
 	fdbg("###############################\n");
 	fdbg("Total of active sectors : %d\n", info.totalsector);
 	fdbg("Recovered Isolated Sectors : %d\n", info.isolatedsector);
-	fdbg("Cleaned Entries : %d\n\n", info.cleanentries);
+	fdbg("Cleaned Entries : %d\n\n", info.cleanedentries);
 
 error_with_map:
 	if (map) {
@@ -2572,5 +2569,3 @@ error_with_map:
 	}
 	return ret;
 }
-
-#endif

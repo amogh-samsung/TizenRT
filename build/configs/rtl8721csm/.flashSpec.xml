@@ -21,5 +21,15 @@
     </executors>
     <options>
         <option desc="Flash all binaries and images">ALL</option>
+        <option desc="Flash TizenRT km0 bootloader">KM0_BL</option>
+        <option desc="Flash TizenRT km4 bootloader">KM4_BL</option>
+        <option desc="Flash TizenRT kernel">KERNEL</option>
+        <option desc="Flash TizenRT userfs">USERFS</option>
+        <option desc="Flash TizenRT ota">OTA</option>
+        <option desc="Erase TizenRT kernel">ERASE KERNEL</option>
+        <option desc="Erase TizenRT ota">ERASE OTA</option>
+        <option desc="Erase TizenRT Secure Storage">ERASE SS</option>
+        <option desc="Erase TizenRT userfs">ERASE USERFS</option>
+        <option desc="Erase all binaries and images">ERASE ALL</option>
     </options>
 </flash>

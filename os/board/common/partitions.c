@@ -27,19 +27,27 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
+
+#if defined(CONFIG_AUTOMOUNT_USERFS) || defined(CONFIG_AUTOMOUNT_ROMFS) || defined(CONFIG_LIBC_ZONEINFO_ROMFS)
+#include <sys/mount.h>
+#include <tinyara/fs/mksmartfs.h>
+#endif
 
 #include <tinyara/fs/mtd.h>
 #include <tinyara/fs/ioctl.h>
+
 #ifdef CONFIG_BINARY_MANAGER
 #include <tinyara/binary_manager.h>
 #endif
 #include "common.h"
 
+#define FS_PATH_MAX 15
+
 #ifdef CONFIG_FLASH_PARTITION
 struct partition_data_s g_flash_part_data = {
 	CONFIG_FLASH_PART_TYPE,
 	CONFIG_FLASH_PART_SIZE,
-	CONFIG_FLASH_MINOR,
 #ifdef CONFIG_MTD_PARTITION_NAMES
 	CONFIG_FLASH_PART_NAME
 #endif
@@ -50,7 +58,6 @@ struct partition_data_s g_flash_part_data = {
 struct partition_data_s g_second_flash_part_data = {
 	CONFIG_SECOND_FLASH_PART_TYPE,
 	CONFIG_SECOND_FLASH_PART_SIZE,
-	CONFIG_SECOND_FLASH_MINOR,
 #ifdef CONFIG_MTD_PARTITION_NAMES
 	CONFIG_SECOND_FLASH_PART_NAME
 #endif
@@ -77,46 +84,102 @@ FAR struct mtd_dev_s *mtd_initialize(void)
 	return mtd;
 }
 
-static void type_specific_initialize(int minor, FAR struct mtd_dev_s *mtd_part, int partno, const char *types)
+static int type_specific_initialize(FAR struct mtd_dev_s *mtd_part, int partno, const char *types, partition_info_t *partinfo)
 {
-#ifdef CONFIG_MTD_FTL
-		if (!strncmp(types, "ftl,", 4)
+	bool do_ftlinit = false;
 #ifdef CONFIG_FS_ROMFS
-		|| !strncmp(types, "romfs,", 6)
+	bool save_romfs_partno = false;
 #endif
+#ifdef CONFIG_LIBC_ZONEINFO_ROMFS
+	bool save_timezone_partno = false;
+#endif
+
+	if (partinfo == NULL) {
+		lldbg("ERROR: partinfo is NULL\n");
+		return ERROR;
+	}
+
+#ifdef CONFIG_MTD_FTL
+	if (!strncmp(types, "ftl,", 4)
 #ifdef CONFIG_BINARY_MANAGER
-		|| !strncmp(types, "kernel,", 7) || !strncmp(types, "bin,", 4)
+	|| !strncmp(types, "kernel,", 7)
 #endif
-		) {
-			if (ftl_initialize(partno, mtd_part)) {
-				lldbg("ERROR: failed to initialise mtd ftl errno :%d\n", errno);
-				return;
-			}
-		} else
+	) {
+		do_ftlinit = true;
+	}
+#ifdef CONFIG_FS_ROMFS
+	else if (!strncmp(types, "romfs,", 6)) {
+		do_ftlinit = true;
+		save_romfs_partno = true;
+	}
+#endif
+#ifdef CONFIG_LIBC_ZONEINFO_ROMFS
+	else if (!strncmp(types, "timezone,", 10)) {
+		do_ftlinit = true;
+		save_timezone_partno = true;
+	}
+#endif
 #endif
 
 #ifdef CONFIG_MTD_CONFIG
-		if (!strncmp(types, "config,", 7)) {
-			mtdconfig_register(mtd_part);
-		} else
+	else if (!strncmp(types, "config,", 7)) {
+		mtdconfig_register(mtd_part);
+	}
 #endif
 #if defined(CONFIG_MTD_SMART) && defined(CONFIG_FS_SMARTFS)
-		if (!strncmp(types, "smartfs,", 8)) {
-			char partref[4];
+	else if (!strncmp(types, "smartfs,", 8)) {
+		char partref[4];
 
-			snprintf(partref, sizeof(partref), "p%d", partno);
-			smart_initialize(minor, mtd_part, partref);
-		} else
+		snprintf(partref, sizeof(partref), "p%d", partno);
+		smart_initialize(FLASH_MINOR, mtd_part, partref);
+		partinfo->smartfs_partno = partno;
+	}
 #endif
-		{
-
+#ifdef CONFIG_MTD_FTL
+	if (do_ftlinit) {
+		if (ftl_initialize(partno, mtd_part)) {
+			lldbg("ERROR: failed to initialise mtd ftl errno :%d\n", errno);
+			return ERROR;
 		}
+#ifdef CONFIG_FS_ROMFS
+		if (save_romfs_partno) {
+			partinfo->romfs_partno = partno;
+			save_romfs_partno = false;
+		}
+#endif
+#ifdef CONFIG_LIBC_ZONEINFO_ROMFS
+		if (save_timezone_partno) {
+			partinfo->timezone_partno = partno;
+			save_timezone_partno = false;
+		}
+#endif
+	}
+#endif
+	return OK;
 }
 
 static void move_to_next_part(const char **par)
 {
 		/* Move to next part information. */
 		while (*(*par)++ != ',');
+}
+
+int get_partition_num(char *part)
+{
+	int partno = 0;
+	int name_len = strlen(part);
+
+	char *partname = CONFIG_FLASH_PART_NAME;
+	while (*partname) {
+		if (!strncmp(partname, part, name_len)) {
+			if (*(partname + name_len) == ',') {
+				return partno;
+			}
+		}
+		partno++;
+		move_to_next_part((const char **)&partname);
+	}
+	return ERROR;
 }
 
 #ifdef CONFIG_MTD_PARTITION_NAMES
@@ -146,13 +209,13 @@ static void configure_partition_name(FAR struct mtd_dev_s *mtd_part, const char 
 }
 #endif
 
-int configure_mtd_partitions(struct mtd_dev_s *mtd, struct partition_data_s *part_data)
+int configure_mtd_partitions(struct mtd_dev_s *mtd, struct partition_data_s *part_data, partition_info_t *partinfo)
 {
+	int ret;
 	int partno;
 	int partoffset;
 	char *types;
 	char *sizes;
-	int minor;
 #ifdef CONFIG_MTD_PARTITION_NAMES
 	char part_name[MTD_PARTNAME_LEN + 1];
 	int index = 0;
@@ -160,7 +223,7 @@ int configure_mtd_partitions(struct mtd_dev_s *mtd, struct partition_data_s *par
 #endif
 	FAR struct mtd_geometry_s geo;
 
-	if (!mtd || !part_data || !part_data->types || !part_data->sizes) {
+	if (!mtd || !part_data || !part_data->types || !part_data->sizes || !partinfo) {
 		lldbg("ERROR: Invalid partition data is NULL\n");
 		return ERROR;
 	}
@@ -180,7 +243,6 @@ int configure_mtd_partitions(struct mtd_dev_s *mtd, struct partition_data_s *par
 	partoffset = 0;
 	types = part_data->types;
 	sizes = part_data->sizes;
-	minor = part_data->minor;
 #ifdef CONFIG_MTD_PARTITION_NAMES
 	names = part_data->names;
 #endif
@@ -209,15 +271,19 @@ int configure_mtd_partitions(struct mtd_dev_s *mtd, struct partition_data_s *par
 			return ERROR;
 		}
 
-		type_specific_initialize(minor, mtd_part, partno, types);
+		ret = type_specific_initialize(mtd_part, partno, types, partinfo);
+		if (ret != OK) {
+			lldbg("ERROR: fail to initialize type specific mtd part.\n");
+			return ERROR;
+		}
 
-#ifdef CONFIG_MTD_PARTITION_NAMES
-		configure_partition_name(mtd_part, (const char **)&names, &index, part_name);
 #ifdef CONFIG_BINARY_MANAGER
 		if (!strncmp(types, "kernel,", 7)) {
 			binary_manager_register_kpart(partno, partsize);
 		}
 #endif
+#ifdef CONFIG_MTD_PARTITION_NAMES
+		configure_partition_name(mtd_part, (const char **)&names, &index, part_name);
 #endif
 		move_to_next_part((const char **)&sizes);
 		move_to_next_part((const char **)&types);
@@ -225,5 +291,51 @@ int configure_mtd_partitions(struct mtd_dev_s *mtd, struct partition_data_s *par
 	}
 
 	return OK;
+}
+
+void automount_fs_partition(partition_info_t *partinfo)
+{
+#if defined(CONFIG_AUTOMOUNT_USERFS) || defined(CONFIG_AUTOMOUNT_ROMFS) || defined(CONFIG_LIBC_ZONEINFO_ROMFS)
+	int ret;
+	char fs_devname[FS_PATH_MAX];
+
+	if (partinfo == NULL) {
+		lldbg("ERROR : partinfo is NULL.\n");
+		return;
+	}
+#ifdef CONFIG_AUTOMOUNT_USERFS
+	/* Initialize and mount user partition (if we have) */
+	snprintf(fs_devname, FS_PATH_MAX, "/dev/smart%dp%d", FLASH_MINOR, partinfo->smartfs_partno);
+#ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
+	ret = mksmartfs(fs_devname, 1, false);
+#else
+	ret = mksmartfs(fs_devname, false);
+#endif
+	if (ret != OK) {
+		lldbg("ERROR: mksmartfs on %s failed\n", fs_devname);
+	} else {
+		ret = mount(fs_devname, "/mnt", "smartfs", 0, NULL);
+		if (ret != OK) {
+			lldbg("ERROR: mounting '%s' failed, errno %d\n", fs_devname, get_errno());
+		}
+	}
+#endif
+
+#ifdef CONFIG_AUTOMOUNT_ROMFS
+	snprintf(fs_devname, FS_PATH_MAX, "/dev/mtdblock%d", partinfo->romfs_partno);
+	ret = mount(fs_devname, "/rom", "romfs", 0, NULL);
+	if (ret != OK) {
+		lldbg("ERROR: mounting '%s'(ROMFS) failed, errno %d\n", fs_devname, get_errno());
+	}
+#endif /* CONFIG_AUTOMOUNT_ROMFS */
+
+#ifdef CONFIG_LIBC_ZONEINFO_ROMFS
+	snprintf(fs_devname, FS_PATH_MAX, "/dev/mtdblock%d", partinfo->timezone_partno);
+	ret = mount(fs_devname, CONFIG_LIBC_TZDIR, "romfs", MS_RDONLY, NULL);
+	if (ret != OK) {
+		lldbg("ROMFS ERROR: timezone mount failed, errno %d\n", get_errno());
+	}
+#endif	/* CONFIG_LIBC_ZONEINFO_ROMFS */
+#endif
 }
 #endif // defined(CONFIG_FLASH_PARTITION) || defined(CONFIG_SECOND_FLASH_PARTITION)

@@ -288,28 +288,18 @@ static int smartfs_open(FAR struct file *filep, const char *relpath, int oflags,
 				goto errout_with_buffer;
 			}
 
-#if defined(CONFIG_SMARTFS_USE_SECTOR_BUFFER) && !defined(NXFUSE_HOST_BUILD)
-			/* If CRC is enabled, hold the entry for writing later */
-			/* Mark flags to indicate that the entry will be written to a new sector in the parent directory.
-			 * This sector will then be chained in the end.
-			 */
-			sf->bflags |= SMARTFS_BFLAG_NEW_ENTRY;
-			/* Save entry mode to write to MTD later */
 			sf->entry.flags = SMARTFS_ERASEDSTATE_16BIT;
 #ifdef CONFIG_SMARTFS_ALIGNED_ACCESS
 			smartfs_wrle16(&sf->entry.flags, (uint16_t)(mode & SMARTFS_DIRENT_MODE));
 #else
 			sf->entry.flags = (uint16_t)(mode & SMARTFS_DIRENT_MODE);
 #endif
-#else
-			/* If CRC is disabled, write the new file entry */
 			/* At this point, either an available entry was found or a new one has been created */
 			ret = smartfs_writeentry(fs, sf->entry, SMARTFS_DIRENT_TYPE_FILE, mode);
 			if (ret != OK) {
 				fdbg("Unable to write entry, ret : %d\n", ret);
 				goto errout_with_buffer;
 			}
-#endif
 		} else {
 			/* Trying to create in a directory that doesn't exist */
 
@@ -561,7 +551,7 @@ static ssize_t smartfs_read(FAR struct file *filep, char *buffer, size_t buflen)
 #endif
 		/* Calculate the number of bytes to read into the buffer */
 
-		bytestoread = bytesinsector - (sf->curroffset - sizeof(struct smartfs_chain_header_s));
+		bytestoread = bytesinsector - (sf->curroffset - (uint16_t)sizeof(struct smartfs_chain_header_s));
 		if (bytestoread + bytesread > buflen) {
 			/* Truncate bytesto read based on buffer len */
 
@@ -1700,7 +1690,7 @@ static void smartfs_stat_common(FAR struct smartfs_mountpt_s *fs,
 		}
 	}
 	buf->st_size = entry->datalen;
-	buf->st_blksize = fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s);
+	buf->st_blksize = SMARTFS_AVAIL_DATABYTES(fs);
 	buf->st_blocks = (buf->st_size + buf->st_blksize - 1) / buf->st_blksize;
 	buf->st_atime = 0;
 	buf->st_ctime = 0;

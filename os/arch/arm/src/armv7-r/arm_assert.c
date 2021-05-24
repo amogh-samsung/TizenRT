@@ -95,9 +95,9 @@
 #include <sys/boardctl.h>
 #endif
 
+bool abort_mode = false;
 #if defined(CONFIG_DEBUG_DISPLAY_SYMBOL)
 #include <stdio.h>
-bool abort_mode = false;
 static bool recursive_abort = false;
 #endif
 
@@ -122,23 +122,6 @@ bool g_upassert = false;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: up_getsp
- ****************************************************************************/
-
-/* I don't know if the builtin to get SP is enabled */
-
-static inline uint32_t up_getsp(void)
-{
-	uint32_t sp;
-	__asm__
-	(
-		"\tmov %0, sp\n\t"
-		: "=r"(sp)
-	);
-	return sp;
-}
 
 /****************************************************************************
  * Name: up_stackdump
@@ -185,8 +168,8 @@ static int is_text_address(unsigned long programCounter)
 	 * FLASH region or in the user FLASH region.
 	 */
 
-	if (((uintptr_t)programCounter >= (uintptr_t)&_stext &&
-		 (uintptr_t)programCounter < (uintptr_t)&_etext) ||
+	if (((uintptr_t)programCounter >= (uintptr_t)&_stext_flash &&
+		 (uintptr_t)programCounter < (uintptr_t)&_etext_flash) ||
 		(sched_self()->uspace &&
 		 (uintptr_t)programCounter >= (uintptr_t)sched_self()->uspace->us_textstart &&
 		 (uintptr_t)programCounter < (uintptr_t)sched_self()->uspace->us_textend)) {
@@ -195,8 +178,8 @@ static int is_text_address(unsigned long programCounter)
 #else
 	/* SVCalls are expected only from the base, kernel FLASH region */
 
-	if ((uintptr_t)programCounter >= (uintptr_t)&_stext &&
-		(uintptr_t)programCounter < (uintptr_t)&_etext) {
+	if ((uintptr_t)programCounter >= (uintptr_t)&_stext_flash &&
+		(uintptr_t)programCounter < (uintptr_t)&_etext_flash) {
 		return 1;
 	}
 #endif
@@ -959,8 +942,8 @@ void up_assert(const uint8_t *filename, int lineno)
 	if (abort_mode) {
 		recursive_abort = true;
 	}
-	abort_mode = true;
 #endif
+	abort_mode = true;
 
 #if CONFIG_TASK_NAME_SIZE > 0
 	lldbg("Assertion failed at file:%s line: %d task: %s\n", filename, lineno, this_task()->name);

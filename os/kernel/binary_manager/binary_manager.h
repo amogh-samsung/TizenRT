@@ -75,18 +75,12 @@
 #define FILES_PER_BIN              2                          /* The number of files per binary */
 
 #define CHECKSUM_SIZE              4
-#define CRC_BUFFER_SIZE            512
-
-#ifdef CONFIG_SUPPORT_COMMON_BINARY
-/* bin id value of zero will indicate the library */
-#define BM_BINID_LIBRARY	0
-#endif
 
 /* Index of 'Common Library' data in binary table. */
-#define COMMLIB_IDX                0
+#define BM_CMNLIB_IDX              0
 
 /* The number of arguments for loader */
-#define LOADER_ARGC               1
+#define LOADER_ARGC                1
 
 #define BINMGR_DEVNAME_FMT         "/dev/mtdblock%d"
 
@@ -104,17 +98,6 @@ enum loading_thread_cmd {
 	LOADCMD_RELOAD = 3,          /* Reload on recovery request */
 #endif
 	LOADCMD_LOAD_MAX,
-};
-
-/* Binary states */
-enum binary_state_e {
-	BINARY_UNREGISTERED = 0,     /* Partition is unregistered */
-	BINARY_INACTIVE = 1,         /* Partition is registered, but binary is not loaded yet */
-	BINARY_LOADING_DONE = 2,     /* Loading binary is done */
-	BINARY_RUNNING = 3,          /* Loaded binary gets scheduling */
-	BINARY_WAITUNLOAD = 4,       /* Loaded binary would be unloaded */
-	BINARY_FAULT = 5,            /* Binary is excluded from scheduling and would be reloaded */
-	BINARY_STATE_MAX,
 };
 
 /* Binary types */
@@ -161,11 +144,11 @@ typedef struct binmgr_uinfo_s binmgr_uinfo_t;
 
 /* Kernel binary data type in kernel table */
 struct binmgr_kinfo_s {
-	char name[BIN_NAME_MAX];
 	uint8_t inuse_idx;
 	uint32_t part_count;
-	part_info_t part_info[KERNEL_BIN_COUNT];
-	float version;
+	uint32_t part_size[KERNEL_BIN_COUNT];
+	int8_t part_num[KERNEL_BIN_COUNT];
+	uint32_t version;
 };
 typedef struct binmgr_kinfo_s binmgr_kinfo_t;
 
@@ -233,6 +216,7 @@ void binary_manager_recover_userfault(uint32_t assert_pc);
 
 void binary_manager_add_binlist(FAR struct tcb_s *tcb);
 void binary_manager_remove_binlist(FAR struct tcb_s *tcb);
+void binary_manager_clear_bindata(int bin_idx);
 void binary_manager_register_statecb(int pid, binmgr_cb_t *cb_info);
 void binary_manager_unregister_statecb(int pid);
 void binary_manager_clear_bin_statecb(int bin_idx);
@@ -244,11 +228,12 @@ uint32_t binary_manager_get_kcount(void);
 binmgr_kinfo_t *binary_manager_get_kdata(void);
 void binary_manager_get_info_with_name(int request_pid, char *bin_name);
 void binary_manager_get_info_all(int request_pid);
+void binary_manager_get_state_with_name(int request_pid, char *bin_name);
 void binary_manager_send_response(char *q_name, void *response_msg, int msg_size);
 int binary_manager_register_ubin(char *name, uint32_t version, uint8_t load_priority);
 void binary_manager_scan_ubin_all(void);
 int binary_manager_scan_ubin(int bin_idx);
-int binary_manager_read_header(char *path, binary_header_t *header_data, bool crc_check);
+int binary_manager_read_header(char *path, user_binary_header_t *header_data, bool crc_check);
 int binary_manager_create_entry(int requester_pid, char *bin_name, int version);
 void binary_manager_release_binary_sem(int bin_idx);
 void binary_manager_update_running_state(int bin_id);

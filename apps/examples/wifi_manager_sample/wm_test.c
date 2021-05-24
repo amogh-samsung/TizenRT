@@ -22,11 +22,13 @@
 #include <tinyara/config.h>
 #include <sys/types.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <sys/time.h>
 #include <errno.h>
 #include <wifi_manager/wifi_manager.h>
+#include "wm_test.h"
 
 #define WM_TEST_COUNT  10
 
@@ -42,6 +44,15 @@
 	"	    (2) [password] is unnecessary in case of open mode\n"	\
 	"	 wm_test leave\n"											\
 	"	 wm_test cancel\n"
+
+#define STRESS_USAGE													\
+	"\n stress test mode options:\n"									\
+	"	 wm_test stress 1 [ssid] [security mode] [password]\n"			\
+	"	 wm_test stress 2 [ssid] [security mode] [password] [softap ssid] [softap password] [softap channel]\n" \
+
+#define ONOFF_USAGE												\
+	"\n onoff test mode options:\n"								\
+	"	 wm_test on_off [ssid] [security mode] [password]\n"	\
 
 #define SCAN_USAGE								\
 	"\n run scan:\n"							\
@@ -81,26 +92,9 @@
 	SCAN_USAGE										\
 	PROFILE_USAGE									\
 	INFO_USAGE										\
+	STRESS_USAGE									\
+	ONOFF_USAGE										\
 	REPEATTC_USAGE
-
-
-typedef void (*test_func)(void *arg);
-
-struct options {
-	test_func func;
-	uint16_t channel;
-	char *ssid;
-	char *bad_ssid;
-	char *password;
-	char *bad_password;
-	wifi_manager_ap_auth_type_e    auth_type;
-	wifi_manager_ap_crypto_type_e  crypto_type;
-	char *softap_ssid;
-	char *softap_password;
-	int scan_specific;
-};
-
-typedef int (*exec_func)(struct options *opt, int argc, char *argv[]);
 
 /**
  * Internal functions
@@ -150,6 +144,7 @@ static int _wm_test_join(struct options *opt, int argc, char *argv[]);
 static int _wm_test_set(struct options *opt, int argc, char *argv[]);
 static int _wm_test_auto(struct options *opt, int argc, char *argv[]);
 static int _wm_test_scan(struct options *opt, int argc, char *argv[]);
+static int _wm_test_stress(struct options *opt, int argc, char *argv[]);
 
 static void wm_process(int argc, char *argv[]);
 static int wm_parse_commands(struct options *opt, int argc, char *argv[]);
@@ -157,6 +152,7 @@ static int wm_parse_commands(struct options *opt, int argc, char *argv[]);
 #ifdef CONFIG_EXAMPLES_WIFIMANAGER_STRESS_TOOL
 extern void wm_run_stress_test(void *arg);
 #endif
+extern void wm_test_on_off(void *arg);
 
 /*
  * Global
@@ -217,6 +213,7 @@ static const char *wifi_test_auth_method[] = {
 	"wep_shared",
 	"wpa",
 	"wpa2",
+	"wpa3",
 	"wpa12",
 	"wpa",
 	"wpa2",
@@ -242,6 +239,7 @@ static const wifi_manager_ap_auth_type_e auth_type_table[] = {
 	WIFI_MANAGER_AUTH_WEP_SHARED,              /**<  use shared key (wep key)                  */
 	WIFI_MANAGER_AUTH_WPA_PSK,                 /**<  WPA_PSK mode                              */
 	WIFI_MANAGER_AUTH_WPA2_PSK,                /**<  WPA2_PSK mode                             */
+	WIFI_MANAGER_AUTH_WPA3_PSK,                /**<  WPA3_PSK mode                             */
 	WIFI_MANAGER_AUTH_WPA_AND_WPA2_PSK,        /**<  WPA_PSK and WPA_PSK mixed mode            */
 	WIFI_MANAGER_AUTH_WPA_PSK_ENT,             /**<  Enterprise WPA_PSK mode                   */
 	WIFI_MANAGER_AUTH_WPA2_PSK_ENT,            /**<  Enterprise WPA2_PSK mode                  */
@@ -284,6 +282,7 @@ typedef enum {
 	WM_TEST_STATS,
 	WM_TEST_INFO,
 	WM_TEST_AUTO,
+	WM_TEST_ONOFF,
 	WM_TEST_STRESS,
 	WM_TEST_MAX,
 } wm_test_e;
@@ -304,6 +303,7 @@ test_func func_table[WM_TEST_MAX] = {
 	wm_get_stats,
 	wm_get_conn_info,
 	wm_auto_test,
+	wm_test_on_off,
 #ifdef CONFIG_EXAMPLES_WIFIMANAGER_STRESS_TOOL
 	wm_run_stress_test
 #else
@@ -327,7 +327,8 @@ exec_func exec_table[WM_TEST_MAX] = {
 	NULL,                                      /* WM_TEST_STATS    */
 	NULL,                                      /* WM_TEST_INFO     */
 	_wm_test_auto,                             /* WM_TEST_AUTO     */
-	NULL                                       /* WM_TEST_STRESS   */
+	_wm_test_join,
+	_wm_test_stress,                                       /* WM_TEST_STRESS   */
 };
 
 char *func_name[WM_TEST_MAX] = {
@@ -346,6 +347,7 @@ char *func_name[WM_TEST_MAX] = {
 	"stats",
 	"info",
 	"auto",
+	"on_off",
 	"stress"
 };
 
@@ -360,14 +362,14 @@ static void print_wifi_ap_profile(wifi_manager_ap_config_s *config, char *title)
 	if (config->ap_auth_type == WIFI_MANAGER_AUTH_UNKNOWN || config->ap_crypto_type == WIFI_MANAGER_CRYPTO_UNKNOWN) {
 		printf("[WT] SECURITY: unknown\n");
 	} else {
-		char security_type[20] = {0,};
-		strcat(security_type, wifi_test_auth_method[config->ap_auth_type]);
+		char security_type[21] = {0,};
+		strncat(security_type, wifi_test_auth_method[config->ap_auth_type], 20);
 		wifi_manager_ap_auth_type_e tmp_type = config->ap_auth_type;
 		if (tmp_type == WIFI_MANAGER_AUTH_OPEN || tmp_type == WIFI_MANAGER_AUTH_IBSS_OPEN || tmp_type == WIFI_MANAGER_AUTH_WEP_SHARED) {
 			printf("[WT] SECURITY: %s\n", security_type);
 		} else {
-			strcat(security_type, "_");
-			strcat(security_type, wifi_test_crypto_method[config->ap_crypto_type]);
+			strncat(security_type, "_", strlen("_"));
+			strncat(security_type, wifi_test_crypto_method[config->ap_crypto_type], strlen(wifi_test_crypto_method[config->ap_crypto_type]));
 			printf("[WT] SECURITY: %s\n", security_type);
 		}
 	}
@@ -398,12 +400,12 @@ static wifi_manager_ap_auth_type_e get_auth_type(const char *method)
 	result[2] = strtok_r(NULL, "_", &next_ptr);
 
 	int i = 0;
-	int list_size = sizeof(wifi_test_auth_method)/sizeof(wifi_test_auth_method[0]);
+	int list_size = sizeof(wifi_test_auth_method) / sizeof(wifi_test_auth_method[0]);
 	for (; i < list_size; i++) {
-		if ((strcmp(method, wifi_test_auth_method[i]) == 0) || (strcmp(result[0], wifi_test_auth_method[i]) == 0)) {
+		if ((strcmp(method, wifi_test_auth_method[i]) == 0) || (result[0] && (strcmp(result[0], wifi_test_auth_method[i]) == 0))) {
 			if (result[2] != NULL) {
 				if (strcmp(result[2], "ent") == 0) {
-					return auth_type_table[i + 3];
+					return WIFI_MANAGER_AUTH_UNKNOWN;
 				}
 			}
 			return auth_type_table[i];
@@ -415,7 +417,7 @@ static wifi_manager_ap_auth_type_e get_auth_type(const char *method)
 static wifi_manager_ap_crypto_type_e get_crypto_type(const char *method)
 {
 	char data[20];
-	strcpy(data, method);
+	strncpy(data, method, 20);
 
 	char *result[2];
 	char *next_ptr;
@@ -423,7 +425,7 @@ static wifi_manager_ap_crypto_type_e get_crypto_type(const char *method)
 	result[1] = next_ptr;
 
 	int i = 0;
-	int list_size = sizeof(wifi_test_crypto_method)/sizeof(wifi_test_crypto_method[0]);
+	int list_size = sizeof(wifi_test_crypto_method) / sizeof(wifi_test_crypto_method[0]);
 	for (; i < list_size; i++) {
 		if (strcmp(result[1], wifi_test_crypto_method[i]) == 0) {
 			return crypto_type_table[i];
@@ -515,9 +517,10 @@ void wm_scan_done(wifi_manager_scan_info_s **scan_result, wifi_manager_scan_resu
 	}
 	wifi_manager_scan_info_s *wifi_scan_iter = *scan_result;
 	while (wifi_scan_iter != NULL) {
-		printf("[WT] WiFi AP SSID: %-25s, BSSID: %-20s, Rssi: %d, Auth: %d, Crypto: %d\n",
+		printf("[WT] WiFi AP SSID: %-25s, BSSID: %-20s, Rssi: %d, Auth: %s, Crypto: %s\n",
 			   wifi_scan_iter->ssid, wifi_scan_iter->bssid, wifi_scan_iter->rssi,
-			   wifi_scan_iter->ap_auth_type, wifi_scan_iter->ap_crypto_type);
+			   wifi_test_auth_method[wifi_scan_iter->ap_auth_type],
+			   wifi_test_crypto_method[wifi_scan_iter->ap_crypto_type]);
 		wifi_scan_iter = wifi_scan_iter->next;
 	}
 	WM_TEST_SIGNAL;
@@ -937,7 +940,7 @@ void wm_auto_test(void *arg)
 		} else {
 			WM_TEST_WAIT; // wait dhcp
 		}
-
+#if 0
 		/* File system call */
 		printf("[WT] Save AP info.\n");
 		res = wifi_manager_save_config(&ap_config);
@@ -974,7 +977,7 @@ void wm_auto_test(void *arg)
 		} else {
 			WM_TEST_WAIT;
 		}
-
+#endif
 		/* Print current status */
 		wm_display_state(NULL);
 
@@ -989,7 +992,6 @@ void wm_auto_test(void *arg)
 	}
 	printf("[WT] Exit WiFi Manager Stress Test..\n");
 
-	return;
 }
 
 static wm_test_e _wm_get_opt(int argc, char *argv[])
@@ -1047,9 +1049,9 @@ static int _wm_test_join(struct options *opt, int argc, char *argv[])
 	}
 
 	if (opt->auth_type == WIFI_MANAGER_AUTH_WEP_SHARED) {
-		if (strlen(argv[5]) == 13) {
+		if ((strlen(argv[5]) == 13) || (strlen(argv[5]) == 26)) {
 			opt->crypto_type = WIFI_MANAGER_CRYPTO_WEP_128;
-		} else if (strlen(argv[5]) == 5) {
+		} else if ((strlen(argv[5]) == 5) || (strlen(argv[5]) == 10)) {
 			opt->crypto_type = WIFI_MANAGER_CRYPTO_WEP_64;
 		} else {
 			return -1;
@@ -1063,6 +1065,79 @@ static int _wm_test_join(struct options *opt, int argc, char *argv[])
 	opt->password = argv[5];
 	return 0;
 }
+
+static int _wm_test_stress(struct options *opt, int argc, char *argv[])
+{
+	if (argc < 4) {
+		return -1;
+	}
+
+	opt->stress_tc_idx = atoi(argv[3]);
+	if (opt->stress_tc_idx == 1) {
+		// TC index is 1
+		if (argc != 7 && argc != 6) {
+			return -1;
+		}
+	} else if (opt->stress_tc_idx == 2) {
+		if (argc != 10 && argc != 9) {
+			return -1;
+		}
+	} else {
+		return -2;
+	}
+
+	opt->ssid = argv[4];
+	opt->auth_type = get_auth_type(argv[5]);
+	if (opt->auth_type == WIFI_MANAGER_AUTH_OPEN || opt->auth_type == WIFI_MANAGER_AUTH_IBSS_OPEN) {
+		// case: open mode
+		opt->password = "";
+		opt->crypto_type = WIFI_MANAGER_CRYPTO_NONE;
+		return 0;
+	}
+
+	if (argc == 6) {
+		// case: unspecified security mode
+		opt->auth_type = WIFI_MANAGER_AUTH_UNKNOWN;
+		opt->crypto_type = WIFI_MANAGER_CRYPTO_UNKNOWN;
+		opt->password = argv[5];
+		return 0;
+	}
+
+	// case: security mode + password
+	if (opt->auth_type == WIFI_MANAGER_AUTH_UNKNOWN) {
+		return -1;
+	}
+
+	if (opt->auth_type == WIFI_MANAGER_AUTH_WEP_SHARED) {
+		if (strlen(argv[6]) == 13) {
+			opt->crypto_type = WIFI_MANAGER_CRYPTO_WEP_128;
+		} else if (strlen(argv[6]) == 5) {
+			opt->crypto_type = WIFI_MANAGER_CRYPTO_WEP_64;
+		} else {
+			return -1;
+		}
+	} else {
+		opt->crypto_type = get_crypto_type(argv[5]);
+		if (opt->crypto_type == WIFI_MANAGER_CRYPTO_UNKNOWN) {
+			return -1;
+		}
+	}
+	opt->password = argv[6];
+
+	int softap_index = 7;
+	if (opt->auth_type == WIFI_MANAGER_AUTH_OPEN) {
+		softap_index = 6;
+	}
+	if (opt->stress_tc_idx == 2) {
+		/* wpa2 aes is a default security mode. */
+		opt->softap_ssid = argv[softap_index++];
+		opt->softap_password = argv[softap_index++];
+		opt->softap_channel = atoi(argv[softap_index]);
+	}
+
+	return 0;
+}
+
 
 static int _wm_test_set(struct options *opt, int argc, char *argv[])
 {
@@ -1081,9 +1156,9 @@ static int _wm_test_set(struct options *opt, int argc, char *argv[])
 	}
 
 	if (opt->auth_type == WIFI_MANAGER_AUTH_WEP_SHARED) {
-		if (strlen(argv[5]) == 13) {
+		if ((strlen(argv[5]) == 13) || (strlen(argv[5]) == 26)) {
 			opt->crypto_type = WIFI_MANAGER_CRYPTO_WEP_128;
-		} else if (strlen(argv[5]) == 5) {
+		} else if ((strlen(argv[5]) == 5) || (strlen(argv[5]) == 10)) {
 			opt->crypto_type = WIFI_MANAGER_CRYPTO_WEP_64;
 		} else {
 			return -1;
@@ -1165,7 +1240,7 @@ exit:
 #ifdef CONFIG_BUILD_KERNEL
 int main(int argc, FAR char *argv[])
 #else
-int wm_test_main(int argc, char *argv[])
+	int wm_test_main(int argc, char *argv[])
 #endif
 {
 	printf("[WT] wifi manager test!!\n");

@@ -186,7 +186,6 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 #else
 				current_regs[REG_PRIMASK] = 1;
 #endif
-				current_regs[REG_XPSR] = ARMV8M_XPSR_T;
 #ifdef CONFIG_BUILD_PROTECTED
 				current_regs[REG_LR] = EXC_RETURN_PRIVTHR;
 #endif
@@ -195,10 +194,6 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 				 */
 
 				up_savestate(tcb->xcp.regs);
-#ifdef CONFIG_ARMV8M_TRUSTZONE
-				/* Store the secure context and PSPLIM of OLD rtcb */
-				tz_store_context(tcb->xcp.regs);
-#endif
 
 			}
 		}
@@ -236,7 +231,6 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 #else
 			tcb->xcp.regs[REG_PRIMASK] = 1;
 #endif
-			tcb->xcp.regs[REG_XPSR] = ARMV8M_XPSR_T;
 #ifdef CONFIG_BUILD_PROTECTED
 			tcb->xcp.regs[REG_LR] = EXC_RETURN_PRIVTHR;
 #endif

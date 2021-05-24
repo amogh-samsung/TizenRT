@@ -1357,7 +1357,7 @@
  * TCP_MSS, IP header, and link header.
  */
 #ifndef PBUF_POOL_BUFSIZE
-#define PBUF_POOL_BUFSIZE               LWIP_MEM_ALIGN_SIZE(TCP_MSS+40+PBUF_LINK_ENCAPSULATION_HLEN+PBUF_LINK_HLEN)
+#define PBUF_POOL_BUFSIZE               LWIP_MEM_ALIGN_SIZE(TCP_MSS+PBUF_IP_HLEN+PBUF_TRANSPORT_HLEN+PBUF_LINK_ENCAPSULATION_HLEN+PBUF_LINK_HLEN)
 #endif
 /**
  * @}
@@ -2351,7 +2351,8 @@
  * May be updated by router advertisement messages.
  */
 #ifndef LWIP_ND6_REACHABLE_TIME
-#define LWIP_ND6_REACHABLE_TIME         30000
+//#define LWIP_ND6_REACHABLE_TIME         30000
+#define LWIP_ND6_REACHABLE_TIME         5000 // TAHI test 56
 #endif
 
 /**

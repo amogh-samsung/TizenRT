@@ -32,7 +32,7 @@
 #include <tinyara/mm/mm.h>
 #include <tinyara/fs/fs.h>
 #include <tinyara/fs/ioctl.h>
-#include <tinyara/heapinfo_drv.h>
+#include <tinyara/mminfo.h>
 
 #ifdef CONFIG_APP_BINARY_SEPARATION
 #include <tinyara/binary_manager.h>
@@ -41,7 +41,7 @@
 #include "utils_proc.h"
 #ifdef CONFIG_HEAPINFO_USER_GROUP
 #include <tinyara/mm/heapinfo_internal.h>
-extern int max_group;
+extern int heapinfo_max_group;
 extern struct heapinfo_group_s heapinfo_group[HEAPINFO_USER_GROUP_NUM];
 extern struct heapinfo_group_info_s group_info[HEAPINFO_THREAD_NUM];
 static char *ptr = CONFIG_HEAPINFO_USER_GROUP_LIST;
@@ -74,7 +74,7 @@ static void heapinfo_print_regions(void)
 	}
 }
 #endif
-static void heapinfo_print_values(char *buf)
+static void heapinfo_print_values(char *buf, void *arg)
 {
 	int i;
 	stat_data stat_info[PROC_STAT_MAX];
@@ -107,7 +107,7 @@ static int heapinfo_read_proc(FAR struct dirent *entryp, FAR void *arg)
 	char buf[HEAPINFO_BUFLEN];
 
 	asprintf(&filepath, "%s/%s/%s", PROCFS_MOUNT_POINT, entryp->d_name, "stat");
-	ret = utils_readfile(filepath, buf, HEAPINFO_BUFLEN, heapinfo_print_values);
+	ret = utils_readfile(filepath, buf, HEAPINFO_BUFLEN, heapinfo_print_values, NULL);
 	if (ret < 0) {
 		printf("Failed to read %s\n", filepath);
 		free(filepath);
@@ -141,7 +141,7 @@ static void heapinfo_show_group(void)
 	printf(" PEAK | HEAP_ON_PEAK | STACK_ON_PEAK | THREADS_IN_GROUP \n");
 	printf("----------------------------------------------------------------\n");
 
-	for (group_idx = 0; group_idx <= max_group; group_idx++) {
+	for (group_idx = 0; group_idx <= heapinfo_max_group; group_idx++) {
 		printf(" %4d | %12d | %13d | ", heapinfo_group[group_idx].peak_size, heapinfo_group[group_idx].heap_size, heapinfo_group[group_idx].stack_size);
 		heapinfo_print_group_threadlist();
 	}
@@ -186,7 +186,7 @@ static void heapinfo_show_taskinfo(void)
 #endif
 	printf("----------\n");
 
-	utils_proc_pid_foreach(heapinfo_read_proc);
+	utils_proc_pid_foreach(heapinfo_read_proc, NULL);
 
 #if !defined(CONFIG_FS_AUTOMOUNT_PROCFS)
 	if (!is_mounted) {
@@ -229,7 +229,8 @@ int utils_heapinfo(int argc, char **args)
 #ifdef CONFIG_APP_BINARY_SEPARATION
 		case 'b':
 			options.heap_type = HEAPINFO_HEAP_TYPE_BINARY;
-			strncpy(options.app_name, optarg, BIN_NAME_MAX);
+			strncpy(options.app_name, optarg, BIN_NAME_MAX - 1);
+			options.app_name[BIN_NAME_MAX - 1] = '\0';
 			heap_name = options.app_name;
 			break;
 #endif
@@ -277,12 +278,12 @@ int utils_heapinfo(int argc, char **args)
 		printf("****************************************************************\n");
 	}
 #endif
-	heapinfo_fd = open(HEAPINFO_DRVPATH, O_RDWR);
+	heapinfo_fd = open(MMINFO_DRVPATH, O_RDWR);
 	if (heapinfo_fd < 0) {
 		printf("Heapinfo Fail, %d.\n", get_errno());
 		return ERROR;
 	}
-	ret = ioctl(heapinfo_fd, HEAPINFOIOC_PARSE, (int)&options);
+	ret = ioctl(heapinfo_fd, MMINFOIOC_PARSE, (int)&options);
 	if (ret == ERROR) {
 		printf("Heapinfo Fail, %d.\n", get_errno());
 		close(heapinfo_fd);

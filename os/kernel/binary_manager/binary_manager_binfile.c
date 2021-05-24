@@ -20,16 +20,19 @@
  ****************************************************************************/
 #include <tinyara/config.h>
 #include <debug.h>
-#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
+#ifdef CONFIG_APP_BINARY_SEPARATION
 #include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <dirent.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#endif
+
 #include <tinyara/binary_manager.h>
 
 #include "binary_manager.h"
@@ -37,6 +40,7 @@
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+#ifdef CONFIG_APP_BINARY_SEPARATION
 /****************************************************************************
  * Name: binary_manager_clear_binfile
  *
@@ -49,7 +53,7 @@ static int binary_manager_clear_binfile(int bin_idx)
 	DIR *dirp;
 	int name_len;
 	char *bin_name;
-	char filepath[CONFIG_PATH_MAX];
+	char filepath[BINARY_PATH_LEN];
 	char running_file[NAME_MAX];
 
 	snprintf(running_file, NAME_MAX, "%s_%d", BIN_NAME(bin_idx), BIN_LOADVER(bin_idx));
@@ -69,7 +73,7 @@ static int binary_manager_clear_binfile(int bin_idx)
 			/* Remove binary file which is not running */
 			if (DIRENT_ISFILE(entryp->d_type) && !strncmp(entryp->d_name, bin_name, name_len) \
 				&& entryp->d_name[name_len] == '_' && strncmp(entryp->d_name, running_file, strlen(running_file))) { 
-				snprintf(filepath, NAME_MAX, "%s/%s", BINARY_DIR_PATH, entryp->d_name);
+				snprintf(filepath, BINARY_PATH_LEN, "%s/%s", BINARY_DIR_PATH, entryp->d_name);
 				bmvdbg("unlink %s\n", entryp->d_name);
 				unlink(filepath);
 			}
@@ -99,8 +103,8 @@ void binary_manager_scan_ubin_all(void)
 	int ret;
 	DIR *dirp;
 	int bin_idx;
-	binary_header_t header_data;
-	char filepath[CONFIG_PATH_MAX];
+	user_binary_header_t header_data;
+	char filepath[BINARY_PATH_LEN];
 
 	/* Open a directory for user binaries, BINARY_DIR_PATH */
 	dirp = opendir(BINARY_DIR_PATH);
@@ -114,7 +118,7 @@ void binary_manager_scan_ubin_all(void)
 			}
 			/* Remove binary file which is not running */
 			if (DIRENT_ISFILE(entryp->d_type)) {
-				snprintf(filepath, CONFIG_PATH_MAX, "%s/%s", BINARY_DIR_PATH, entryp->d_name);
+				snprintf(filepath, BINARY_PATH_LEN, "%s/%s", BINARY_DIR_PATH, entryp->d_name);
 				ret = binary_manager_read_header(filepath, &header_data, false);
 				if (ret < 0) {
 					continue;
@@ -156,8 +160,8 @@ int binary_manager_scan_ubin(int bin_idx)
 	int latest_ver;
 	int latest_idx;
 	char *bin_name;
-	binary_header_t header_data;
-	char filepath[CONFIG_PATH_MAX];
+	user_binary_header_t header_data;
+	char filepath[BINARY_PATH_LEN];
 
 	bmvdbg("Open a directory, %s\n", BINARY_DIR_PATH);
 
@@ -186,7 +190,7 @@ int binary_manager_scan_ubin(int bin_idx)
 		/* Read and Verify a binary file */
 		if (DIRENT_ISFILE(entryp->d_type) \
 			&& !strncmp(entryp->d_name, bin_name, name_len) && entryp->d_name[name_len] == '_') {
-			snprintf(filepath, CONFIG_PATH_MAX, "%s/%s", BINARY_DIR_PATH, entryp->d_name);
+			snprintf(filepath, BINARY_PATH_LEN, "%s/%s", BINARY_DIR_PATH, entryp->d_name);
 			ret = binary_manager_read_header(filepath, &header_data, false);
 			if (ret == OK) {
 				BIN_FILECNT(bin_idx)++;
@@ -212,6 +216,7 @@ int binary_manager_scan_ubin(int bin_idx)
 
 	return OK;
 }
+#endif
 
 /****************************************************************************
  * Name: binary_manager_create_entry
@@ -222,12 +227,14 @@ int binary_manager_scan_ubin(int bin_idx)
  ****************************************************************************/
 int binary_manager_create_entry(int requester_pid, char *bin_name, int version)
 {
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	int fd;
 	int ret;
 	int bin_idx;
+	char filepath[BINARY_PATH_LEN];
+#endif
 	binmgr_kinfo_t *kerinfo;
 	char q_name[BIN_PRIVMQ_LEN];
-	char filepath[CONFIG_PATH_MAX];
 	binmgr_createbin_response_t response_msg;
 
 	if (requester_pid < 0 || bin_name == NULL || version < 0) {
@@ -236,18 +243,19 @@ int binary_manager_create_entry(int requester_pid, char *bin_name, int version)
 		goto send_result;
 	}
 
-	/* If it is kernel, Return the devname of inacive kernel partition */
+	/* If it is kernel, Return the devname of inactive kernel partition */
 	if (!strncmp("kernel", bin_name, BIN_NAME_MAX)) {
 		kerinfo = binary_manager_get_kdata();
 		if (kerinfo->part_count > 1) {
 			response_msg.result = BINMGR_OK;
-			snprintf(response_msg.binpath, CONFIG_PATH_MAX, BINMGR_DEVNAME_FMT, kerinfo->part_info[kerinfo->inuse_idx ^ 1].part_num, CONFIG_PATH_MAX);
+			snprintf(response_msg.binpath, BINARY_PATH_LEN, BINMGR_DEVNAME_FMT, kerinfo->part_num[kerinfo->inuse_idx ^ 1]);
 		} else {
 			response_msg.result = BINMGR_NOT_FOUND;
 		}
 		goto send_result;
 	}
 
+#ifdef CONFIG_APP_BINARY_SEPARATION
 	/* Else, Create a new file for user binary and Return filepath */
 	bin_idx = binary_manager_get_index_with_name(bin_name);
 	if (bin_idx >= 0) {
@@ -274,11 +282,11 @@ int binary_manager_create_entry(int requester_pid, char *bin_name, int version)
 	response_msg.result = BINMGR_OPERATION_FAIL;
 
 	/* Create a new file */
-	snprintf(filepath, CONFIG_PATH_MAX, "%s/%s_%d", BINARY_DIR_PATH, bin_name, version);
+	snprintf(filepath, BINARY_PATH_LEN, "%s/%s_%d", BINARY_DIR_PATH, bin_name, version);
 	fd = open(filepath, O_RDWR | O_CREAT, 0666);
 	if (fd > 0) {
 		bmvdbg("Created file '%s' for binary %s\n", filepath, bin_name);
-		strncpy(response_msg.binpath, filepath, CONFIG_PATH_MAX);
+		strncpy(response_msg.binpath, filepath, strlen(filepath) + 1);
 		response_msg.result = BINMGR_OK;
 		close(fd);
 	} else if (errno == ENOENT) {
@@ -288,12 +296,14 @@ int binary_manager_create_entry(int requester_pid, char *bin_name, int version)
 			fd = open(filepath, O_RDWR | O_CREAT, 0666);
 			if (fd > 0) {
 				bmvdbg("Created file '%s' for binary %s\n", filepath, bin_name);
-				strncpy(response_msg.binpath, filepath, CONFIG_PATH_MAX);
+				strncpy(response_msg.binpath, filepath, strlen(filepath) + 1);
 				response_msg.result = BINMGR_OK;
 				close(fd);
 			}
 		}
 	}
+#endif
+
 send_result:
 	snprintf(q_name, BIN_PRIVMQ_LEN, "%s%d", BINMGR_RESPONSE_MQ_PREFIX, requester_pid);
 	binary_manager_send_response(q_name, &response_msg, sizeof(binmgr_createbin_response_t));

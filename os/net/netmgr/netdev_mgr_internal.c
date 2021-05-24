@@ -22,6 +22,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <ifaddrs.h>
+#include <tinyara/kmalloc.h>
 #include <tinyara/lwnl/lwnl.h>
 #include <tinyara/net/if/wifi.h>
 #include <tinyara/net/if/ethernet.h>
@@ -62,10 +64,8 @@ static sem_t g_netdev_lock;
 /*
  * external function
  */
-#ifdef CONFIG_NET_LWIP
 // the way to get lwip stack need to be changed.
 extern void *get_netdev_ops_lwip(void);
-#endif
 
 
 struct netdev *nm_get_netdev(uint8_t *ifname)
@@ -90,7 +90,7 @@ int nm_foreach(tr_netdev_callback_t callback, void *arg)
 	for (int i = 0; i < g_netdev_idx; i++) {
 		dev = &g_netdev[i];
 		if (callback(dev, arg) != 0) {
-			ret = 1;
+			ret = -1;
 			break;
 		}
 	}
@@ -100,15 +100,13 @@ int nm_foreach(tr_netdev_callback_t callback, void *arg)
 
 int _nm_register_loop(struct netdev *dev, struct netdev_config *config)
 {
+	int res = 0;
 	struct nic_config nconfig;
 	nconfig.loopback = 1;
 
-	int res = 0;
-#ifdef CONFIG_NET_LWIP
 	struct netdev_ops *ops = get_netdev_ops_lwip();
 	dev->ops = (void *)ops;
 	res = ops->init_nic(dev, &nconfig);
-#endif
 
 	return res;
 }
@@ -150,7 +148,7 @@ struct netdev *nm_register(struct netdev_config *config)
 	}
 
 	// to do calculate exact size of tx_buf
-	dev->tx_buf = (uint8_t *)malloc(config->mtu + 12); // 12 is padding.
+	dev->tx_buf = (uint8_t *)kmm_malloc(config->mtu + 12); // 12 is padding.
 	if (!dev->tx_buf) {
 		ndbg("create txbuf fail(%d)\n", config->mtu + 12);
 		return NULL;
@@ -171,7 +169,6 @@ struct netdev *nm_register(struct netdev_config *config)
 	nconfig.is_default = config->is_default;
 	nconfig.loopback = 0;
 
-#ifdef CONFIG_NET_LWIP
 	struct netdev_ops *ops = get_netdev_ops_lwip();
 
 	ops->linkoutput = config->ops->linkoutput;
@@ -179,7 +176,6 @@ struct netdev *nm_register(struct netdev_config *config)
 
 	dev->ops = (void *)ops;
 	ops->init_nic(dev, &nconfig);
-#endif
 
 	dev->priv = config->priv;
 
@@ -196,12 +192,7 @@ int nm_count(void)
 
 int nm_ifup(struct netdev *dev)
 {
-	int ret = ((struct netdev_ops *)(dev->ops))->ifup(dev);
-	if (ret < 0) {
-		ndbg("fail to up network interface\n");
-		return -1;
-	}
-
+	int ret = 0;
 	if (dev->type == NM_WIFI) {
 		ret = dev->t_ops.wl->init(dev);
 		if (ret < 0) {
@@ -221,6 +212,12 @@ int nm_ifup(struct netdev *dev)
 		}
 	}
 
+	ret = ((struct netdev_ops *)(dev->ops))->ifup(dev);
+	if (ret < 0) {
+		ndbg("fail to up network interface\n");
+		return -1;
+	}
+	
 	return 0;
 }
 

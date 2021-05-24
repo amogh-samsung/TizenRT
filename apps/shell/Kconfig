@@ -10,12 +10,6 @@ config TASH
 	depends on NFILE_DESCRIPTORS != 0
 
 if TASH
-config TASH_MAX_COMMANDS
-	int "Max number of TASH commands"
-	default 32
-	---help---
-		The maximum number of TASH commands to register.
-
 config TASH_MAX_STORE_COMMANDS
 	int "Max number of stored TASH commands"
 	default 10
@@ -28,6 +22,13 @@ config TASH_USLEEP
 	depends on !DISABLE_SIGNALS
 	---help---
 		Enable 'usleep' command in TASH.
+
+config TASH_REBOOT
+	bool "Enable 'reboot' command in TASH"
+	default n
+	depends on BOARDCTL_RESET
+	---help---
+		Enable 'reboot' command in TASH.
 
 config TASH_COMMAND_INTERFACE
 	bool "enable command interface to TASH"
@@ -55,5 +56,22 @@ config TASH_SCRIPT
 	---help---
 		This suppors parsing and executing shell script.
 		See "sh" on TASH help command.
+
+config SECURED_TASH
+	bool "Enable Secure shell"
+	depends on NET_SECURITY_TLS
+	default n
+
+if SECURED_TASH
+
+config TASH_PASSWORD_SHA256
+	string "SHA256 encrypted password (32 Bytes)"
+	default "436890f31fcd6b154a0e49df9f190bd8b1dcd4b917a7a80b2d928452c22901f7"
+	---help---
+		Enable password to enter TASH. The password is hashed by SHA256 so that
+		the length of this config should be 32 bytes (64 characters).
+		default : hash value of "TizenRT" (Password : TizenRT)
+endif
+
 endif
 endmenu

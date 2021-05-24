@@ -61,6 +61,7 @@
 #include <unistd.h>
 #include <tinyara/mm/mm.h>
 #include <tinyara/sched.h>
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -112,10 +113,10 @@ int mm_mallinfo(FAR struct mm_heap_s *heap, FAR struct mallinfo *info)
 		mm_takesemaphore(heap);
 
 		for (node = heap->mm_heapstart[region]; node < heap->mm_heapend[region]; node = (struct mm_allocnode_s *)((char *)node + node->size)) {
-			mvdbg("region=%d node=%p size=%p preceding=%p (%c)\n", region, node, node->size, (node->preceding & ~MM_ALLOC_BIT), (node->preceding & MM_ALLOC_BIT) ? 'A' : 'F');
+			mvdbg("region=%d node=%p size=%u preceding=%u (%c)\n", region, node, node->size,
+				(node->preceding & ~MM_ALLOC_BIT), (node->preceding & MM_ALLOC_BIT) ? 'A' : 'F');
 
 			/* Check if the node corresponds to an allocated memory chunk */
-
 			if ((node->preceding & MM_ALLOC_BIT) != 0) {
 				uordblks += node->size;
 			} else {
@@ -130,7 +131,7 @@ int mm_mallinfo(FAR struct mm_heap_s *heap, FAR struct mallinfo *info)
 		mm_givesemaphore(heap);
 
 		mvdbg("region=%d node=%p heapend=%p\n", region, node, heap->mm_heapend[region]);
-		DEBUGASSERT(node == heap->mm_heapend[region]);
+		ASSERT(node == heap->mm_heapend[region]);
 		uordblks += SIZEOF_MM_ALLOCNODE;	/* account for the tail node */
 	}
 #undef region
@@ -140,7 +141,7 @@ int mm_mallinfo(FAR struct mm_heap_s *heap, FAR struct mallinfo *info)
 #if CONFIG_KMM_NHEAPS > 1
 	info->arena    += heap->mm_heapsize;
 	info->ordblks  += ordblks;
-	info->mxordblk += mxordblk;
+	info->mxordblk = (info->mxordblk > mxordblk) ? info->mxordblk : mxordblk;
 	info->uordblks += uordblks;
 	info->fordblks += fordblks;
 #else
