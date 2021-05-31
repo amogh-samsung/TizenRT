@@ -54,6 +54,7 @@
 #include <sys/stat.h>
 #include <sys/statfs.h>
 
+#include "inode/inode.h"
 #include "littlefs/lfs.h"
 #include "littlefs/lfs_util.h"
 
@@ -492,15 +493,8 @@ static int littlefs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   inode = filep->f_inode;
   fs    = inode->i_private;
   drv   = fs->drv;
-
-  if (INODE_IS_MTD(drv))
-    {
-      return MTD_IOCTL(drv->u.i_mtd, cmd, arg);
-    }
-  else
-    {
-      return drv->u.i_bops->ioctl(drv, cmd, arg);
-    }
+  DEBUGASSERT(drv && drv->i_private);
+  return MTD_IOCTL((FAR struct mtd_dev_s *)drv->i_private, cmd, arg);
 }
 
 /****************************************************************************
@@ -822,16 +816,11 @@ static int littlefs_read_block(FAR const struct lfs_config *c,
   block = (block * c->block_size + off) / geo->blocksize;
   size  = size / geo->blocksize;
 
-  if (INODE_IS_MTD(drv))
-    {
-      ret = MTD_BREAD(drv->u.i_mtd, block, size, buffer);
-    }
-  else
-    {
-      ret = drv->u.i_bops->read(drv, buffer, block, size);
-    }
-
-  return ret >= 0 ? OK : ret;
+  DEBUGASSERT(drv && drv->i_private);
+  ret = MTD_BREAD((struct mtd_dev_s *)drv->i_private, block, size, buffer);
+  if (ret >= 0)
+         return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -850,16 +839,11 @@ static int littlefs_write_block(FAR const struct lfs_config *c,
   block = (block * c->block_size + off) / geo->blocksize;
   size  = size / geo->blocksize;
 
-  if (INODE_IS_MTD(drv))
-    {
-      ret = MTD_BWRITE(drv->u.i_mtd, block, size, buffer);
-    }
-  else
-    {
-      ret = drv->u.i_bops->write(drv, buffer, block, size);
-    }
-
-  return ret >= 0 ? OK : ret;
+  DEBUGASSERT(drv && drv->i_private);
+  ret = MTD_BWRITE((struct mtd_dev_s *)drv->i_private, block, size, buffer);
+  if (ret >= 0)
+         return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -873,15 +857,14 @@ static int littlefs_erase_block(FAR const struct lfs_config *c,
   FAR struct inode *drv = fs->drv;
   int ret = OK;
 
-  if (INODE_IS_MTD(drv))
-    {
-      FAR struct mtd_geometry_s *geo = &fs->geo;
-      size_t size = c->block_size / geo->erasesize;
+  DEBUGASSERT(drv && drv->i_private);
+  FAR struct mtd_geometry_s *geo = &fs->geo;
+  size_t size = c->block_size / geo->erasesize;
+  block = block * c->block_size / geo->erasesize;
+  ret = MTD_ERASE((struct mtd_dev_s *)drv->i_private, block, size);
 
-      block = block * c->block_size / geo->erasesize;
-      ret = MTD_ERASE(drv->u.i_mtd, block, size);
-    }
-
+  if (ret >= 0)
+         return OK;
   return ret >= 0 ? OK : ret;
 }
 
@@ -895,16 +878,12 @@ static int littlefs_sync_block(FAR const struct lfs_config *c)
   FAR struct inode *drv = fs->drv;
   int ret;
 
-  if (INODE_IS_MTD(drv))
-    {
-      ret = MTD_IOCTL(drv->u.i_mtd, BIOC_FLUSH, 0);
-    }
-  else
-    {
-      ret = drv->u.i_bops->ioctl(drv, BIOC_FLUSH, 0);
-    }
+  DEBUGASSERT(drv && drv->i_private);
+  //ret = MTD_IOCTL((struct mtd_dev_s *)drv->i_private, BIOC_FLUSH, 0);
 
-  return ret == -ENOTTY ? OK : ret;
+  if (ret == -ENOTTY)
+         return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -945,36 +924,11 @@ static int littlefs_bind(FAR struct inode *driver, FAR const void *data,
   fs->drv = driver;           /* Save the driver reference */
   sem_init(&fs->sem, 0, 0); /* Initialize the access control semaphore */
 
-  if (INODE_IS_MTD(driver))
-    {
-      /* Get MTD geometry directly */
+  /* Get MTD geometry directly */
 
-      ret = MTD_IOCTL(driver->u.i_mtd, MTDIOC_GEOMETRY,
+  DEBUGASSERT(driver && driver->i_private);
+  ret = MTD_IOCTL((FAR struct mtd_dev_s *)driver->i_private, MTDIOC_GEOMETRY,
                       (unsigned long)&fs->geo);
-    }
-  else
-    {
-      /* Try to get FLT MTD geometry first */
-
-      ret = driver->u.i_bops->ioctl(driver, MTDIOC_GEOMETRY,
-                                    (unsigned long)&fs->geo);
-      if (ret < 0)
-        {
-          struct geometry geometry;
-
-          /* Not FLT MTD device, get normal block geometry */
-
-          ret = driver->u.i_bops->geometry(driver, &geometry);
-          if (ret >= 0)
-            {
-              /* And convert to MTD geometry */
-
-              fs->geo.blocksize    = geometry.geo_sectorsize;
-              fs->geo.erasesize    = geometry.geo_sectorsize;
-              fs->geo.neraseblocks = geometry.geo_nsectors;
-            }
-        }
-    }
 
   if (ret < 0)
     {
