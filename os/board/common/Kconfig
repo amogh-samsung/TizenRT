@@ -127,3 +127,12 @@ config AUTOMOUNT_ROMFS
 	depends on FS_ROMFS
 	---help---
 		If enabled, mount romfs partition automatically at boot.
+
+config AUTOMOUNT_LITTLEFS
+	bool "Automount littlefs partition"
+	default n
+	depends on AUTOMOUNT
+	depends on FS_LITTLEFS
+	---help---
+		If enabled, mount userfs partition automatically at boot.
+		The device name of the partition will be set like "/dev/little0pX".
