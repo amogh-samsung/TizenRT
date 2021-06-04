@@ -964,13 +964,8 @@ static int littlefs_bind(FAR struct inode *driver, FAR const void *data,
   ret = lfs_mount(&fs->lfs, &fs->cfg);
   if (ret < 0)
     {
-      /* Auto format the device if -o autoformat */
 
-      if (ret != LFS_ERR_CORRUPT ||
-          !data || strcmp(data, "autoformat"))
-        {
-          goto errout_with_fs;
-        }
+      /* Try to re format the device and mount again if mount fails the first time */      // TODO: Might change to specific cases where mount failure leads to retrying
 
       ret = lfs_format(&fs->lfs, &fs->cfg);
       if (ret < 0)

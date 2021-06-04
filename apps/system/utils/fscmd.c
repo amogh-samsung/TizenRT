@@ -836,7 +836,7 @@ static int search_mountpoints(const char *dirpath, foreach_mountpoint_t handler)
 			return ERROR;
 		}
 
-		if ((buf.f_type == SMARTFS_MAGIC) || (buf.f_type == ROMFS_MAGIC) || (buf.f_type == PROCFS_MAGIC) || (buf.f_type == TMPFS_MAGIC)) {
+		if ((buf.f_type == SMARTFS_MAGIC) || (buf.f_type == ROMFS_MAGIC) || (buf.f_type == PROCFS_MAGIC) || (buf.f_type == TMPFS_MAGIC) || (buf.f_type == LITTLEFS_SUPER_MAGIC)) {
 			ret = handler(fullpath, &buf, NULL);
 			if (ret != OK) {
 				FSCMD_OUTPUT("handler is failed at %s\n", fullpath);
@@ -1255,6 +1255,12 @@ static const char *get_fstype(FAR struct statfs *statbuf)
 #ifdef CONFIG_FS_HOSTFS
 	case HOSTFS_MAGIC:
 		fstype = "hostfs";
+		break;
+#endif
+
+#ifdef CONFIG_FS_LITTLEFS
+	case LITTLEFS_SUPER_MAGIC:
+		fstype = "littlefs";
 		break;
 #endif
 

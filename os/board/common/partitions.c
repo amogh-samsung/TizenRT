@@ -135,6 +135,15 @@ static int type_specific_initialize(FAR struct mtd_dev_s *mtd_part, int partno, 
 		partinfo->smartfs_partno = partno;
 	}
 #endif
+#if defined(CONFIG_FS_LITTLEFS)
+	else if (!strncmp(types, "littlefs,", 9)) {
+		char partref[4];
+
+		snprintf(partref, sizeof(partref), "p%d", partno);
+		little_initialize(FLASH_MINOR, mtd_part, partref);
+		partinfo->littlefs_partno = partno;
+	}
+#endif
 #ifdef CONFIG_MTD_FTL
 	if (do_ftlinit) {
 		if (ftl_initialize(partno, mtd_part)) {
@@ -318,6 +327,15 @@ void automount_fs_partition(partition_info_t *partinfo)
 		if (ret != OK) {
 			lldbg("ERROR: mounting '%s' failed, errno %d\n", fs_devname, get_errno());
 		}
+	}
+#endif
+
+#ifdef CONFIG_AUTOMOUNT_LITTLEFS
+	snprintf(fs_devname, FS_PATH_MAX, "/dev/little%dp%d", FLASH_MINOR, partinfo->littlefs_partno);
+
+	ret = mount(fs_devname, "/lfs", "littlefs", 0, NULL);
+	if (ret != OK) {
+		lldbg("ERROR: mounting '%s' failed, errno %d\n", fs_devname, get_errno());
 	}
 #endif
 
