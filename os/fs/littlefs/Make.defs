@@ -57,16 +57,5 @@ CFLAGS += -DLFS_ERROR=ferr
 CFLAGS += -DLFS_ASSERT=DEBUGASSERT
 
 LITTLEFS_VERSION ?= 2.4.0
-LITTLEFS_TARBALL = v$(LITTLEFS_VERSION).tar.gz
-
-$(LITTLEFS_TARBALL):
-	$(Q) curl -L -o littlefs/$(LITTLEFS_TARBALL) https://github.com/ARMmbed/littlefs/archive/$(LITTLEFS_TARBALL)
-
-.littlefsunpack: $(LITTLEFS_TARBALL)
-	$(Q) tar zxf littlefs/$(LITTLEFS_TARBALL) -C littlefs
-	$(Q) mv littlefs/littlefs-$(LITTLEFS_VERSION) littlefs/littlefs
-	$(Q) touch littlefs/.littlefsunpack
-
-context:: .littlefsunpack
 
 endif

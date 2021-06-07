@@ -96,6 +96,7 @@ BIN = libfs$(LIBEXT)
 
 
 all: $(BIN)
+.PHONY: depend clean distclean
 
 $(AOBJS): %$(OBJEXT): %.S
 	$(call ASSEMBLE, $<, $@)
