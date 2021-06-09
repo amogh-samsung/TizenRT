@@ -2185,15 +2185,9 @@ static int lfs_dir_rawread(lfs_t *lfs, lfs_dir_t *dir, struct lfs_info *info) {
 
     // special offset for '.' and '..'
     if (dir->pos == 0) {
-        info->type = LFS_TYPE_DIR;
-        strcpy(info->name, ".");
-        dir->pos += 1;
-        return true;
+        dir->pos += 2;
     } else if (dir->pos == 1) {
-        info->type = LFS_TYPE_DIR;
-        strcpy(info->name, "..");
         dir->pos += 1;
-        return true;
     }
 
     while (true) {
