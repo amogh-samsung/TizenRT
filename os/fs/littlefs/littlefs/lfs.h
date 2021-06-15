@@ -172,6 +172,10 @@ enum lfs_whence_flags {
 };
 
 
+struct lfs_struct_s {
+	FAR struct mtd_dev_s *mtd;
+};
+
 // Configuration provided during initialization of the littlefs
 struct lfs_config {
     // Opaque user provided context that can be used to pass

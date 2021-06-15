@@ -485,6 +485,7 @@ static int littlefs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct littlefs_mountpt_s *fs;
   FAR struct inode *inode;
   FAR struct inode *drv;
+  struct lfs_struct_s *dev;
 
   /* Recover our private data from the struct file instance */
 
@@ -492,7 +493,9 @@ static int littlefs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   fs    = inode->i_private;
   drv   = fs->drv;
   DEBUGASSERT(drv && drv->i_private);
-  return MTD_IOCTL((FAR struct mtd_dev_s *)drv->i_private, cmd, arg);
+
+  dev = drv->i_private;
+  return MTD_IOCTL((FAR struct mtd_dev_s *)dev->mtd, cmd, arg);
 }
 
 /****************************************************************************
@@ -806,13 +809,16 @@ static int littlefs_read_block(FAR const struct lfs_config *c,
   FAR struct littlefs_mountpt_s *fs = c->context;
   FAR struct mtd_geometry_s *geo = &fs->geo;
   FAR struct inode *drv = fs->drv;
+  struct lfs_struct_s *dev;
   int ret;
 
   block = (block * c->block_size + off) / geo->blocksize;
   size  = size / geo->blocksize;
 
   DEBUGASSERT(drv && drv->i_private);
-  ret = MTD_BREAD((struct mtd_dev_s *)drv->i_private, block, size, buffer);
+
+  dev = drv->i_private;
+  ret = MTD_BREAD((struct mtd_dev_s *)dev->mtd, block, size, buffer);
   if (ret >= 0)
          return OK;
   return ret;
@@ -829,13 +835,16 @@ static int littlefs_write_block(FAR const struct lfs_config *c,
   FAR struct littlefs_mountpt_s *fs = c->context;
   FAR struct mtd_geometry_s *geo = &fs->geo;
   FAR struct inode *drv = fs->drv;
+  struct lfs_struct_s *dev;
   int ret;
 
   block = (block * c->block_size + off) / geo->blocksize;
   size  = size / geo->blocksize;
 
   DEBUGASSERT(drv && drv->i_private);
-  ret = MTD_BWRITE((struct mtd_dev_s *)drv->i_private, block, size, buffer);
+
+  dev = drv->i_private;
+  ret = MTD_BWRITE((struct mtd_dev_s *)dev->mtd, block, size, buffer);
   if (ret >= 0)
          return OK;
   return ret;
@@ -850,13 +859,16 @@ static int littlefs_erase_block(FAR const struct lfs_config *c,
 {
   FAR struct littlefs_mountpt_s *fs = c->context;
   FAR struct inode *drv = fs->drv;
+  struct lfs_struct_s *dev;
   int ret = OK;
 
   DEBUGASSERT(drv && drv->i_private);
   FAR struct mtd_geometry_s *geo = &fs->geo;
   size_t size = c->block_size / geo->erasesize;
   block = block * c->block_size / geo->erasesize;
-  ret = MTD_ERASE((struct mtd_dev_s *)drv->i_private, block, size);
+
+  dev = drv->i_private;
+  ret = MTD_ERASE((struct mtd_dev_s *)dev->mtd, block, size);
 
   if (ret >= 0)
          return OK;
@@ -874,7 +886,18 @@ static int littlefs_sync_block(FAR const struct lfs_config *c)
   int ret = OK;
 
   DEBUGASSERT(drv && drv->i_private);
-  //ret = MTD_IOCTL((struct mtd_dev_s *)drv->i_private, BIOC_FLUSH, 0);
+
+#ifdef CONFIG_FTL_WRITEBUFFER
+  /* If the registered ftl driver instance buffers characters for writing,
+   * flush the write buffer
+   */
+  ret = drv->u.i_bops->ioctl(drv, BIOC_FLUSH, 0);
+#else
+  struct lfs_struct_s *dev;
+
+  dev = drv->i_private;
+  ret = MTD_IOCTL((struct mtd_dev_s *)dev->mtd, MTDIOC_FLUSH, 0);
+#endif
 
   if (ret == -ENOTTY)
          return OK;
@@ -889,6 +912,7 @@ static int littlefs_bind(FAR struct inode *driver, FAR const void *data,
                          FAR void **handle)
 {
   FAR struct littlefs_mountpt_s *fs;
+  struct lfs_struct_s *dev;
   int ret;
 
   /* Open the block driver */
@@ -922,7 +946,9 @@ static int littlefs_bind(FAR struct inode *driver, FAR const void *data,
   /* Get MTD geometry directly */
 
   DEBUGASSERT(driver && driver->i_private);
-  ret = MTD_IOCTL((FAR struct mtd_dev_s *)driver->i_private, MTDIOC_GEOMETRY,
+
+  dev = driver->i_private;
+  ret = MTD_IOCTL((FAR struct mtd_dev_s *)dev->mtd, MTDIOC_GEOMETRY,
                       (unsigned long)&fs->geo);
 
   if (ret < 0)

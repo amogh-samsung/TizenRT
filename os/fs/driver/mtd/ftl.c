@@ -577,6 +577,7 @@ int ftl_initialize(int minor, FAR struct mtd_dev_s *mtd)
 		if (ret < 0) {
 			dbg("ERROR: register_blockdriver failed: %d\n", -ret);
 			kmm_free(dev);
+			return ret;
 		}
 	}
 

@@ -73,6 +73,7 @@
 #include <tinyara/fs/fs.h>
 #include <tinyara/fs/ioctl.h>
 #include <tinyara/fs/mtd.h>
+#include "../../littlefs/littlefs/lfs.h"
 
 /****************************************************************************
  * Private Definitions
@@ -123,24 +124,32 @@ int little_initialize(int minor, FAR struct mtd_dev_s *mtd, FAR const char *part
 {
 	int ret = -ENOMEM;
 	char devname[18];
+	struct lfs_struct_s *dev;
 
 #ifdef CONFIG_DEBUG
 	if (minor < 0 || minor > 255 || !mtd) {
 		return -EINVAL;
 	}
 #endif
-	if (partname != NULL) {
-		snprintf(devname, 18, "/dev/little%d%s", minor, partname);
-	} else {
-		snprintf(devname, 18, "/dev/little%d", minor);
-	}
 
-	/* Inode private data is a reference to the SMART device structure. */
+	dev = (struct lfs_struct_s*)kmm_malloc(sizeof(struct lfs_struct_s));
+	if (dev) {
+		dev->mtd = mtd;
 
-	ret = register_blockdriver(devname, &g_bops, 0, mtd);
-	if (ret < 0) {
-		fdbg("register_blockdriver failed: %d\n", -ret);
-		return ret;
+		if (partname != NULL) {
+			snprintf(devname, 18, "/dev/little%d%s", minor, partname);
+		} else {
+			snprintf(devname, 18, "/dev/little%d", minor);
+		}
+
+		/* Inode private data is a reference to the SMART device structure. */
+
+		ret = register_blockdriver(devname, &g_bops, 0, dev);
+		if (ret < 0) {
+			fdbg("register_blockdriver failed: %d\n", -ret);
+			kmm_free(dev);
+			return ret;
+		}
 	}
 
 	return OK;

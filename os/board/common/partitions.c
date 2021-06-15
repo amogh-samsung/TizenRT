@@ -93,6 +93,9 @@ static int type_specific_initialize(FAR struct mtd_dev_s *mtd_part, int partno, 
 #ifdef CONFIG_LIBC_ZONEINFO_ROMFS
 	bool save_timezone_partno = false;
 #endif
+#ifdef CONFIG_FS_LITTLEFS
+	bool save_littlefs_partno = false;
+#endif
 
 	if (partinfo == NULL) {
 		lldbg("ERROR: partinfo is NULL\n");
@@ -119,6 +122,12 @@ static int type_specific_initialize(FAR struct mtd_dev_s *mtd_part, int partno, 
 		save_timezone_partno = true;
 	}
 #endif
+#ifdef CONFIG_FS_LITTLEFS
+	else if (!strncmp(types, "littlefs,", 9)) {
+		do_ftlinit = true;
+		save_littlefs_partno = true;
+	}
+#endif
 #endif
 
 #ifdef CONFIG_MTD_CONFIG
@@ -138,7 +147,6 @@ static int type_specific_initialize(FAR struct mtd_dev_s *mtd_part, int partno, 
 #if defined(CONFIG_FS_LITTLEFS)
 	else if (!strncmp(types, "littlefs,", 9)) {
 		char partref[4];
-
 		snprintf(partref, sizeof(partref), "p%d", partno);
 		little_initialize(FLASH_MINOR, mtd_part, partref);
 		partinfo->littlefs_partno = partno;
@@ -160,6 +168,12 @@ static int type_specific_initialize(FAR struct mtd_dev_s *mtd_part, int partno, 
 		if (save_timezone_partno) {
 			partinfo->timezone_partno = partno;
 			save_timezone_partno = false;
+		}
+#endif
+#ifdef CONFIG_FS_LITTLEFS
+		if (save_littlefs_partno) {
+			partinfo->littlefs_partno = partno;
+			save_littlefs_partno = false;
 		}
 #endif
 	}
@@ -331,8 +345,11 @@ void automount_fs_partition(partition_info_t *partinfo)
 #endif
 
 #ifdef CONFIG_AUTOMOUNT_LITTLEFS
+#ifdef CONFIG_MTD_FTL
+	snprintf(fs_devname, FS_PATH_MAX, "/dev/mtdblock%d", partinfo->littlefs_partno);
+#else
 	snprintf(fs_devname, FS_PATH_MAX, "/dev/little%dp%d", FLASH_MINOR, partinfo->littlefs_partno);
-
+#endif
 	ret = mount(fs_devname, "/lfs", "littlefs", 0, NULL);
 	if (ret != OK) {
 		lldbg("ERROR: mounting '%s' failed, errno %d\n", fs_devname, get_errno());
