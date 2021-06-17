@@ -246,6 +246,10 @@
 										 *		to reveal physical sector.
 										 * OUT: Physical sector number align with
 										 *		logical sector number */
+#define BIOC_FLUSH      _BIOC(0x000C)	/* Flush the block device write buffer
+										 * IN: None
+										 * OUT: None (ioctl return value provides
+										 *      success/failure indication) */
 #define BIOC_DEBUGCMD   _BIOC(0x00FF)	/* Send driver specific debug command /
 										 * data to the block device.
 										 * IN:  Pointer to a struct defined for
@@ -272,6 +276,9 @@
 											 * OUT: None */
 #define MTDIOC_SETSPEED   _MTDIOC(0x0004)	/* IN:  New bus speed in Hz
 											 * OUT: None */
+#define MTDIOC_FLUSH      _MTDIOC(0x0005)	/* IN:  None
+											 * OUT: None (ioctl return value provides
+											 *      success/failure indication) */
 
 /* TinyAra ARP driver ioctl definitions (see include/netinet/arp.h) *******************/
 

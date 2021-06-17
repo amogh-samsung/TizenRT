@@ -209,6 +209,10 @@ EXTERN "C" {
 	int rwb_invalidate(FAR struct rwbuffer_s *rwb, off_t startblock, size_t blockcount);
 #endif
 
+#ifdef CONFIG_DRVR_WRITEBUFFER
+	int rwb_flush(struct rwbuffer_s * rwb);
+#endif
+
 #undef EXTERN
 #if defined(__cplusplus)
 }
