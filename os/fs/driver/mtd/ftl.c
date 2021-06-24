@@ -520,6 +520,9 @@ int ftl_initialize(int minor, FAR struct mtd_dev_s *mtd)
 	dev = (struct ftl_struct_s *)kmm_malloc(sizeof(struct ftl_struct_s));
 	if (dev) {
 		/* Initialize the FTL device structure */
+		mtd->read_count = 0;
+		mtd->write_count = 0;
+		mtd->erase_count = 0;
 
 		dev->mtd = mtd;
 

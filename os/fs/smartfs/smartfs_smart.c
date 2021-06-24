@@ -1340,6 +1340,9 @@ static int smartfs_statfs(struct inode *mountpt, struct statfs *buf)
 	buf->f_files = 0;
 	buf->f_ffree = fs->fs_llformat.nfreesectors;
 
+	/* Print flash consumption estimation */
+	print_flash_consumption(fs->fs_blkdriver);
+
 	smartfs_semgive(fs);
 	return ret;
 }

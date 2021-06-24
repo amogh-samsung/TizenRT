@@ -513,6 +513,26 @@ static const struct block_operations g_bops = {
  * Public Functions
  ****************************************************************************/
 
+int print_flash_consumption(FAR struct inode *inode)
+{
+	struct smart_struct_s *dev;
+	struct mtd_dev_s *mtd;
+
+	DEBUGASSERT(inode->i_private);
+
+	dev = (struct smart_struct_s *)inode->i_private;
+	mtd = dev->mtd;
+
+	printf("\n");
+	fdbg("\n======================================================\n");
+	printf("mtd read byte count = %llu\n", mtd->read_count);
+	printf("mtd written byte count = %llu\n", mtd->write_count);
+	printf("mtd erase count = %lu\n", mtd->erase_count);
+	printf("======================================================\n");
+
+	return OK;
+}
+
 /****************************************************************************
  * Name: smart_dumpsector
  *
@@ -552,6 +572,7 @@ static int smart_dumpsector(FAR struct smart_struct_s *dev, uint16_t sector, uin
 		fdbg("Error reading phys sector %d\n", psector);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret*dev->geo.blocksize;
 
 	fsdbg("Sector dump Logical : %d physical : %d sector size : %d\n", lsector, psector, dev->sectorsize);
 	for (int i = 0; i < dev->sectorsize; i++) {
@@ -870,6 +891,7 @@ static ssize_t smart_reload(struct smart_struct_s *dev, FAR uint8_t *buffer, off
 	if (nread != mtdBlocks) {
 		fdbg("Read %d blocks starting at block %d failed: %d\n", nblocks, startblock, nread);
 	}
+	dev->mtd->read_count += nread*dev->geo.blocksize;
 
 	/* Return smart "nblocks/nsectors" instead of mtdBlocks. */
 	return nread / dev->mtdBlksPerSector;
@@ -971,6 +993,7 @@ static ssize_t smart_write(FAR struct inode *inode, FAR const unsigned char *buf
 
 				return ret;
 			}
+			dev->mtd->erase_count += 1;
 		}
 
 		/* Calculate the number of blocks to write. */
@@ -997,6 +1020,7 @@ static ssize_t smart_write(FAR struct inode *inode, FAR const unsigned char *buf
 
 			return -EIO;
 		}
+		dev->mtd->write_count += nxfrd*dev->geo.blocksize;
 
 		/* Then update for amount written. */
 
@@ -1363,6 +1387,7 @@ static int smart_byte_to_block_write(FAR struct smart_struct_s *dev, size_t offs
 		fdbg("Error %d reading from device\n", -ret);
 		return ret;
 	}
+	dev->mtd->read_count += ret*dev->geo.blocksize;
 
 	memcpy(&dev->bytebuffer[offset - startblock * dev->geo.blocksize], buffer, nbytes);
 	
@@ -1373,6 +1398,8 @@ static int smart_byte_to_block_write(FAR struct smart_struct_s *dev, size_t offs
 		fdbg("Error %d writing to device\n", -ret);
 		return ret;
 	}
+	dev->mtd->write_count += ret*dev->geo.blocksize;
+
 	return nbytes;
 }
 
@@ -1398,6 +1425,7 @@ static ssize_t smart_bytewrite(FAR struct smart_struct_s *dev, size_t offset, in
 		ret = smart_journal_bytewrite(dev, offset, nbytes, buffer);
 #else
 		ret = MTD_WRITE(dev->mtd, offset, nbytes, buffer);
+		dev->mtd->write_count += ret;
 #endif
 		return ret;
 	} else
@@ -1544,6 +1572,7 @@ static uint16_t smart_cache_lookup(FAR struct smart_struct_s *dev, uint16_t logi
 				if (ret != sizeof(struct smart_sect_header_s)) {
 					return physical;
 				}
+				dev->mtd->read_count += ret;
 
 				/* Get the logical sector number for this physical sector. */
 
@@ -1910,6 +1939,8 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 			fdbg("Error reading physical sector %d.\n", sector);
 			goto err_out;
 		}
+		dev->mtd->read_count += ret*dev->geo.blocksize;
+
 		/* copy header data only, will be used below */
 		memcpy(&header, dev->rwbuffer, sizeof(struct smart_sect_header_s));
 
@@ -1982,6 +2013,7 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 				fdbg("Error reading physical sector %d at line %d.\n", sector, __LINE__);
 				goto err_out;
 			}
+			dev->mtd->read_count += ret;
 
 			/* Validate the format signature */
 
@@ -2089,6 +2121,7 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 				if (ret != sizeof(struct smart_sect_header_s)) {
 					goto err_out;
 				}
+				dev->mtd->read_count += ret;
 
 				/* Get the logical sector number for this physical sector. */
 
@@ -2127,6 +2160,7 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 			if (ret != sizeof(struct smart_sect_header_s)) {
 				goto err_out;
 			}
+			dev->mtd->read_count += ret;
 #if SMART_STATUS_VERSION == 1
 			if (header.status & SMART_STATUS_CRC) {
 				seq1 = header.seq;
@@ -2170,6 +2204,7 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 			if (ret != sizeof(struct smart_sect_header_s)) {
 				goto err_out;
 			}
+			dev->mtd->read_count += ret;
 #if CONFIG_SMARTFS_ERASEDSTATE == 0xFF
 			header.status &= ~SMART_STATUS_RELEASED;
 #else
@@ -2221,6 +2256,7 @@ static int smart_scan(FAR struct smart_struct_s *dev)
 			fdbg("Error reading physical sector %d.\n", sector);
 			goto err_out;
 		}
+		dev->mtd->read_count += ret*dev->geo.blocksize;
 
 		/* Check for old format wear leveling. */
 		if (dev->rwbuffer[SMART_WEAR_LEVEL_FORMAT_SIG] == 0) {
@@ -2395,7 +2431,7 @@ static void smart_erase_block_if_empty(FAR struct smart_struct_s *dev, uint16_t 
 			dev->freecount[block] = 0;
 			return;
 		}
-
+		dev->mtd->erase_count += 1;
 
 #ifdef CONFIG_MTD_SMART_SECTOR_ERASE_DEBUG
 		if (dev->erasecounts) {
@@ -2563,6 +2599,7 @@ static int smart_relocate_static_data(FAR struct smart_struct_s *dev, uint16_t b
 				ret = -EIO;
 				goto errout;
 			}
+			dev->mtd->read_count += ret*dev->geo.blocksize;
 
 			/* Test if the block is in use. */
 
@@ -2793,6 +2830,7 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 	if (ret < 0) {
 		return ret;
 	}
+	dev->mtd->erase_count += dev->geo.neraseblocks;
 
 	/* Now construct a logical sector zero header to write to the device. */
 
@@ -2871,6 +2909,7 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
 		return -EIO;
 	}
+	dev->mtd->write_count += wrcount*dev->geo.blocksize;
 
 	/* Now initialize our internal control variables. */
 
@@ -3015,6 +3054,7 @@ static int smart_relocate_sector(FAR struct smart_struct_s *dev, uint16_t oldsec
 	ret = smart_journal_bwrite(dev, newsector);
 #else
 	ret = MTD_BWRITE(dev->mtd, newsector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
+	dev->mtd->write_count += ret*dev->geo.blocksize;
 #endif
 
 #else							/* CONFIG_MTD_SMART_ENABLE_CRC */
@@ -3028,6 +3068,7 @@ static int smart_relocate_sector(FAR struct smart_struct_s *dev, uint16_t oldsec
 	/* Write the data to the new physical sector location. */
 
 	ret = MTD_BWRITE(dev->mtd, newsector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
+	dev->mtd->write_count += ret*dev->geo.blocksize;
 
 	/* Commit the sector. */
 
@@ -3146,6 +3187,8 @@ static int smart_relocate_block(FAR struct smart_struct_s *dev, uint16_t block)
 			ret = -EIO;
 			goto errout;
 		}
+		dev->mtd->read_count += ret*dev->geo.blocksize;
+
 		header = (FAR struct smart_sect_header_s *)dev->rwbuffer;
 		/* Test if the block is in use. */
 
@@ -3236,6 +3279,7 @@ static int smart_relocate_block(FAR struct smart_struct_s *dev, uint16_t block)
 		dev->freecount[block] = 0;
 		return ret;
 	}
+	dev->mtd->erase_count += 1;
 #if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_SMARTFS)
 	dev->unusedsectors += freecount;
 	dev->blockerases++;
@@ -3488,6 +3532,7 @@ retry:
 			fdbg("Error reading phys sector %d\n", physicalsector);
 			return -1;
 		}
+		dev->mtd->read_count += ret;
 		if ((UINT8TOUINT16(header.logicalsector) == 0xFFFF) &&
 #if SMART_STATUS_VERSION == 1
 			((header.seq == 0xFF) && (header.crc8 == 0xFF)) &&
@@ -3888,6 +3933,7 @@ static int smart_write_alloc_sector(FAR struct smart_struct_s *dev, uint16_t log
 
 		return -EIO;
 	}
+	dev->mtd->write_count += ret*dev->geo.blocksize;
 #endif							/* CONFIG_MTD_SMART_ENABLE_CRC */
 
 	return ret;
@@ -4023,6 +4069,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev, unsigned long arg)
 		fdbg("Error reading phys sector %d\n", physsector);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret*dev->geo.blocksize;
 
 	/* Test if we need to relocate the sector to perform the write */
 
@@ -4189,6 +4236,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev, unsigned long arg)
 		ret = smart_journal_bwrite(dev, physsector);
 #else
 		ret = MTD_BWRITE(dev->mtd, physsector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
+		dev->mtd->write_count += ret*dev->geo.blocksize;
 #endif
 		if (ret != dev->mtdBlksPerSector) {
 			fdbg("Error writing to physical sector ret : %d logical %d physical : %d\n", ret, UINT8TOUINT16(header->logicalsector), physsector);
@@ -4270,6 +4318,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev, unsigned long arg)
 		ret = smart_journal_bwrite(dev, physsector);
 #else
 		ret = MTD_BWRITE(dev->mtd, physsector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
+		dev->mtd->write_count += ret*dev->geo.blocksize;
 #endif
 		if (ret != dev->mtdBlksPerSector) {
 			fdbg("Error writing to physical sector %d ret : %d\n", physsector, ret);
@@ -4284,6 +4333,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev, unsigned long arg)
 
 			ret = smart_validate_crc(dev);
 		}
+		dev->mtd->read_count += ret*dev->geo.blocksize;
 
 		if (ret != OK) {
 			fdbg("Error validating physical sector %d\n", physsector);
@@ -4360,6 +4410,8 @@ static int smart_readsector(FAR struct smart_struct_s *dev, unsigned long arg)
 		fdbg("Error reading phys sector %d\n", physsector);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret*dev->geo.blocksize;
+
 #if SMART_STATUS_VERSION == 1
 	/* Test if this sector has CRC enabled or not. */
 
@@ -4395,6 +4447,7 @@ static int smart_readsector(FAR struct smart_struct_s *dev, unsigned long arg)
 		fvdbg("Error reading sector %d header\n", physsector);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 
 	/* Do a sanity check on the header data. */
 
@@ -4416,6 +4469,7 @@ static int smart_readsector(FAR struct smart_struct_s *dev, unsigned long arg)
 		fdbg("Error reading phys sector %d\n", physsector);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 #endif
 	return ret;
 }
@@ -4675,6 +4729,7 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev, unsigned long
 	if (ret != sizeof(struct smart_sect_header_s)) {
 		return ret;
 	}
+	dev->mtd->read_count += ret;
 
 	/* Do a sanity check on the logical sector number. */
 	if (UINT8TOUINT16(header.logicalsector) != (uint16_t)logicalsector) {
@@ -5036,6 +5091,7 @@ static int smart_journal_release_sector(FAR struct smart_struct_s *dev, uint16_t
 		fdbg("Read header failed psector : %d offset : %d\n", psector, offset);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 	
 #if CONFIG_SMARTFS_ERASEDSTATE == 0xFF
 	header.status &= ~(SMART_STATUS_RELEASED | SMART_STATUS_COMMITTED);
@@ -5054,6 +5110,7 @@ static int smart_journal_release_sector(FAR struct smart_struct_s *dev, uint16_t
 		fdbg("Release sector Error ret : %d target sector : %d\n", ret, psector);
 		return -EIO;
 	}
+	dev->mtd->write_count += ret;
 	
 	/* Verify that the sector is released */
 	/* TODO However, it is just a change of 1 byte, very unlikely to fail. If failure never happens, remove the code below */
@@ -5063,6 +5120,7 @@ static int smart_journal_release_sector(FAR struct smart_struct_s *dev, uint16_t
 		fdbg("Error verify release physical sector : %d, status : %02x\n", psector, header.status);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 	
 	if (!SECTOR_IS_RELEASED(header)) {
 		fdbg("Verify release physical sector failed sector : %d status : %02x\n", psector, header.status); 
@@ -5116,6 +5174,7 @@ static int smart_journal_checkin(FAR struct smart_struct_s *dev, journal_log_t *
 		fdbg("Checkin Error, write log data... physical address %u ret : %d\n", address, ret);
 		return -EIO;
 	}
+	dev->mtd->write_count += ret;
 
 	/* Verify written journal data */
 	ret = MTD_READ(dev->mtd, address, log_size, (FAR uint8_t *)&buf);
@@ -5123,6 +5182,7 @@ static int smart_journal_checkin(FAR struct smart_struct_s *dev, journal_log_t *
 		fdbg("Checkin Error, read log data... physical address %u ret : %d\n", address, ret);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 
 	if (smart_validate_journal_crc(&buf) != OK) {
 		fdbg("Checkin Error, verify crc failed buf crc16 : %d calc crc : %d\n", UINT8TOUINT16(buf.crc16), smart_calc_journal_crc(&buf));
@@ -5155,6 +5215,7 @@ static int smart_journal_checkout(FAR struct smart_struct_s *dev, journal_log_t 
 		smart_journal_print_log(dev, log);
 		return -EIO;
 	}
+	dev->mtd->write_count += ret;
 
 	return OK;
 }
@@ -5194,6 +5255,7 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 			fdbg("write data failed ret : %d\n", ret);
 			return -EIO;
 		}
+		dev->mtd->write_count += ret;
 
 		/* Update MTD Header on target physical sector */
 		ret = MTD_WRITE(dev->mtd, psector * dev->sectorsize, mtd_size, (FAR uint8_t *)&log->mtd_header);
@@ -5201,10 +5263,13 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 			fdbg("Checkout error, write mtd header.. ret : %d\n", ret);
 			return -EIO;
 		}
+		dev->mtd->write_count += ret;
+
 #else
 		/* If board doesn't support bytewrite, write entire of sector */
 		memcpy(&dev->rwbuffer[0], (FAR uint8_t *)&log->mtd_header, mtd_size);
 		ret = MTD_BWRITE(dev->mtd, psector * dev->mtdBlksPerSector, dev->mtdBlksPerSector, (FAR uint8_t *)dev->rwbuffer);
+		dev->mtd->write_count += ret*dev->geo.blocksize;
 #endif
 
 		/* It is written entire sector, so validation check should be here */
@@ -5213,6 +5278,7 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 			fdbg("Check Error validating physical sector %d\n", psector);
 			return -EIO;
 		}
+		dev->mtd->read_count += ret*dev->geo.blocksize;
 
 		/* Validate the CRC of the read-back data. */
 		ret = smart_validate_crc(dev);
@@ -5232,6 +5298,7 @@ static int smart_journal_process_transaction(FAR struct smart_struct_s *dev, jou
 			fdbg("Erase failed ret : %d\n", ret);
 			return -EIO;
 		}
+		dev->mtd->erase_count += 1;
 		break;
 	}
 	
@@ -5345,6 +5412,7 @@ static ssize_t smart_journal_bytewrite(FAR struct smart_struct_s *dev, size_t of
 		fdbg("Get MTD Header failed..\n");
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 	log.mtd_header.status = *buffer;
 	ret = smart_journal_checkin(dev, &log, address, psector, SMART_JOURNAL_TYPE_RELEASE);
 	if (ret != OK) {
@@ -5406,6 +5474,7 @@ static int smart_journal_erase(FAR struct smart_struct_s *dev, uint16_t block)
 		fdbg("Get MTD Header failed..\n");
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 	
 	/* Get Current Journal Address */
 	address = smart_journal_get_writeaddress(dev);
@@ -5456,6 +5525,7 @@ static int smart_journal_read_journal_log(FAR struct smart_struct_s *dev, journa
 		fdbg("Read Journal Log Error, physical address %u ret : %d\n", addr, ret);
 		return -EIO;
 	}
+	dev->mtd->read_count += ret;
 	return OK;
 }
 
@@ -5645,6 +5715,7 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 			fdbg("Read from data sector error : %d\n", ret);
 			return -EIO;
 		}
+		dev->mtd->read_count += ret*dev->geo.blocksize;
 
 		/* And then check validation of crc, if crc is matched, it means both of data & header are valid.
 		 * But Should we check written mtd header with journal log's?
@@ -5687,6 +5758,7 @@ static int smart_journal_recovery(FAR struct smart_struct_s *dev, journal_log_t 
 				fdbg("Checkout error, write mtd header.. ret : %d\n", ret);
 				return -EIO;
 			}
+			dev->mtd->write_count += ret;
 		}
 		break;
 
@@ -5779,6 +5851,10 @@ int smart_initialize(int minor, FAR struct mtd_dev_s *mtd, FAR const char *partn
 	dev = (FAR struct smart_struct_s *)kmm_malloc(sizeof(struct smart_struct_s));
 	if (dev) {
 		/* Initialize the SMART device structure. */
+
+		mtd->read_count = 0;
+		mtd->write_count = 0;
+		mtd->erase_count = 0;
 
 		dev->mtd = mtd;
 #ifdef CONFIG_MTD_SMART_ALLOC_DEBUG

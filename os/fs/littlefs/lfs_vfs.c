@@ -820,7 +820,10 @@ static int littlefs_read_block(FAR const struct lfs_config *c,
   dev = drv->i_private;
   ret = MTD_BREAD((struct mtd_dev_s *)dev->mtd, block, size, buffer);
   if (ret >= 0)
+  {
+         dev->mtd->read_count += ret*geo->blocksize;
          return OK;
+  }
   return ret;
 }
 
@@ -846,7 +849,10 @@ static int littlefs_write_block(FAR const struct lfs_config *c,
   dev = drv->i_private;
   ret = MTD_BWRITE((struct mtd_dev_s *)dev->mtd, block, size, buffer);
   if (ret >= 0)
+  {
+         dev->mtd->write_count += ret*geo->blocksize;
          return OK;
+  }
   return ret;
 }
 
@@ -871,7 +877,10 @@ static int littlefs_erase_block(FAR const struct lfs_config *c,
   ret = MTD_ERASE((struct mtd_dev_s *)dev->mtd, block, size);
 
   if (ret >= 0)
+  {
+         dev->mtd->erase_count += block;
          return OK;
+  }
   return ret >= 0 ? OK : ret;
 }
 
@@ -1110,6 +1119,9 @@ static int littlefs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
 
       ret = 0;
     }
+
+  /* Print flash consumption estimate */
+  print_flash_consumption(fs->drv);
 
   littlefs_semgive(fs);
   return ret;

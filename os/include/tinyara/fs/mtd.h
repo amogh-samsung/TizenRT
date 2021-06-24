@@ -167,6 +167,9 @@ struct mtd_dev_s {
 
 	FAR const char *name;
 #endif
+	uint64_t read_count;
+	uint64_t write_count;
+	uint32_t erase_count;
 };
 
 enum mtd_partition_tag_s {
@@ -393,6 +396,8 @@ FAR struct mtd_dev_s *progmem_initialize(void);
 #ifdef CONFIG_MTD_REGISTRATION
 int mtd_register(FAR struct mtd_dev_s *mtd, FAR const char *name);
 #endif
+
+int print_flash_consumption(FAR struct inode *inode);
 
 #undef EXTERN
 #ifdef __cplusplus
