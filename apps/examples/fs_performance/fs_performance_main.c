@@ -86,9 +86,10 @@
 #define TEST_FLAG_SINGLE_WRITE_MIX 	9
 #define TEST_FLAG_INCREMENTAL_OVERWRITE 10
 #define TEST_FLAG_INCREMENTAL_OVERREAD  11
+#define TEST_FLAG_CLOSE_AFTER_WRITE	13
 #define N_MULTIPLE_FILES 		12
 #define TEST_FILE_NAME_LEN_MAX		27
-#define MAX_ITR 			5
+#define MAX_ITR 			1
 #define FILE_SIZE			32
 #define N_FILES				2
 /****************************************************************************
@@ -107,6 +108,7 @@ char rw_buf_s1800b[1800];
 char rw_buf_s1[5*1024*1];
 char rw_buf_s2[5*1024*2];
 char rw_buf_s3[5*1024*3];
+char rw_buf_large[16*1024];
 int BUFFER_SIZE_S[5];
 unsigned long long time_write_inc_ove[35];
 unsigned long long time_read_inc_ove[35];
@@ -190,6 +192,10 @@ static void output(int flag, unsigned long time, int itr)
                printf("Time taken for over reading %d times to single file incrementally from their start is %lu.%06lu s\n", itr, (time)/1000000, (time)%1000000);
                 break;
 
+	case TEST_FLAG_CLOSE_AFTER_WRITE :
+		printf("Time taken for  %d itr %lu.%06lu s\n", itr, (time)/1000000, (time)%1000000);
+                break;
+
 	default:
 		break;
 	}
@@ -228,7 +234,7 @@ static int perform_read(int fd, int size_type) {
 
 static int do_test(int fd, int opn, int size_type)
 {
-	int totalSize = 3*1024*1024; //to be written 3 mb in total
+	int totalSize = 1024; //to be written 3 mb in total
 	int ret = OK;
 	int i;
 	int j;
@@ -544,7 +550,45 @@ static int do_test(int fd, int opn, int size_type)
 		time_read_inc_ove[size_type] += tt;
 		//output(TEST_FLAG_INCREMENTAL_OVERREAD, tt, 32*size_type);
 		break;
-
+	
+	case TEST_FLAG_CLOSE_AFTER_WRITE :
+		printf("\n***********CLOSE_AFTER_WRITE*******************\n");
+		fd = open(buffer[0], O_RDWR | O_CREAT);
+		if (fd < 0) {
+			printf("Unable to create file : %s,  ret = %d\n", buffer[0], fd);
+			return -1;
+		}
+		close(fd);
+		for (int buf_typ = 1; buf_typ <= 16; buf_typ = buf_typ * 2) {
+			char c = 'a' + buf_typ;
+			printf("Buffer size = %d kb\n",buf_typ);
+			memset(rw_buf_large, c, (16*1024)+1);
+			for (int itr = 1; itr <=10; itr++){
+				printf("      itr =   %d == ",itr);
+				gettimeofday(&wr_time_start, NULL);
+				for(i = 1; i <= (totalSize) / buf_typ; i++) {
+					fd = open(buffer[0], O_RDWR);
+					if (fd < 0) {
+						printf("Unable to do open file : %s,  ret = %d\n", buffer[0], fd);
+						return -1;
+					}
+					ret = lseek(fd, 0, SEEK_SET);
+					if (ret < 0) {
+						printf("Unable to move file pointer to start\n");
+						return -1;
+					}
+					ret = write(fd, rw_buf_large, buf_typ * 1024);
+					if (ret != (buf_typ * 1024)) {
+						printf("Unable to do test performance write on file: %s,iter= %d ,ret = %d\n", buffer[j], i, ret);
+					}
+					close(fd);
+				}
+				gettimeofday(&wr_time_stop, NULL);
+				tt = (wr_time_stop.tv_sec - wr_time_start.tv_sec) * 1000000 + (wr_time_stop.tv_usec - wr_time_start.tv_usec);	
+				printf(" time :  %lu.%06lu \n", (tt/1000000), (tt % 1000000));
+			}		
+		}
+		break;
 	default:
 		break;
 	}
@@ -608,6 +652,7 @@ static int init(int size_type)
 		close(fd_sample);
 		return -1;
 	}
+	memset (rw_buf_large, 0, (16 * 1024) + 1 );
 
 	close(fd_sample);
 
@@ -656,7 +701,7 @@ int fs_performance_main(int argc, char *argv[])
 		goto end;
 	}*/
 
-	int option = 6;// atoi(argv[1]);	//Which test case to be executed
+	int option = 7;// atoi(argv[1]);	//Which test case to be executed
 	int ret = 0;
 	int fd_single = 0;		        //File Descriptor for single file in test environment
 	int fd_single2 = 0;                     //File Descriptor for incremental overwrite case
@@ -692,10 +737,19 @@ int fs_performance_main(int argc, char *argv[])
 	case 5: goto START;//SINGLE_MIX;
 
 	case 6: goto INCREMENTAL_OVE;
+	
+	case 7: goto WRITE_AFTER_CLOSE;
 
 	default: break;
 	}
 
+WRITE_AFTER_CLOSE:
+       ret = do_test(fd_single2, TEST_FLAG_CLOSE_AFTER_WRITE,size_type);
+       if (ret < 0) {
+	       printf("Unable to test performance (write after close), ret = %d\n", ret);
+	       return -1;
+       }
+       goto errout;
 
 INCREMENTAL_OVE:
        // create 64kb file and overwrite and overread 1kb data 64 times...
